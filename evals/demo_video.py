@@ -48,7 +48,10 @@ def ease(x):
 def load(data_dir):
     d = Path(data_dir)
     read = lambda name: json.loads((d / name).read_text())
-    seconds = lambda name: read(name)["wall_ms"] / 1000
+    def seconds(name):  # a resumed run's wall_ms covers only the resumed part: never below summed call time / workers
+        run = read(name)
+        calls = sum(c.get("wall_ms", 0) for c in run.get("channels", {}).values()) / max(run.get("workers", 6), 1)
+        return max(run["wall_ms"], calls if "channels" in run and "effort" in run else 0) / 1000
     jev_tokens = sum(s["input_tokens"] for s in read("experiment_2.json")["schemas"].values())
     estimates = [r for r in list_price.all_estimates(d, list_price.prompt_tokens(d)) if r["channels"] == 110]
     listed = sorted(((LANE_OF[r["model"]], NAMES[r["model"]] + (" (projected)" if "projected_from" in r else ""), r["usd"])
@@ -122,18 +125,17 @@ def cost(d, t, data):
     text(d, (90, 70), "What the same 110 judgments cost", 34, INK, BOLD)
     text(d, (90, 118), f"Jev: {data['jev_tokens']:,} input tokens at $0.042 per million, output free. Others: estimated at list API prices.", 22, DIM)
     lo, hi = math.log10(0.001), math.log10(5)
-    span = 900
+    x0, span = 330, 700
+    step = min(110, 470 // len(data["cost"]))
     for i, (key, label, usd) in enumerate(data["cost"]):
-        step = min(110, 440 // len(data["cost"]))
-        y = 170 + i * step
-        text(d, (90, y), label, 24, LANE[key], BOLD)
-        grow = ease((t - 0.35 * i) / 1.2)
+        y = 175 + i * step
+        text(d, (90, y + 14), label, 22, LANE[key], BOLD, "lm")
+        grow = ease((t - 0.3 * i) / 1.2)
         width = int(span * (math.log10(usd) - lo) / (hi - lo) * grow)
-        d.rectangle((90, y + 34, 90 + span, y + 56), fill=(28, 33, 40))
-        d.rectangle((90, y + 34, 90 + width, y + 56), fill=LANE[key])
+        d.rectangle((x0, y + 2, x0 + span, y + 26), fill=(28, 33, 40))
+        d.rectangle((x0, y + 2, x0 + width, y + 26), fill=LANE[key])
         if grow >= 1:
-            text(d, (1190, y + 10), f"${usd:.3f}" if usd < 1 else f"${usd:.2f}", 30, LANE[key], BOLD, "ra")
-    text(d, (1190, 130), "log scale", 18, DIM, SANS, "ra")
+            text(d, (1190, y + 14), f"${usd:.3f}" if usd < 1 else f"${usd:.2f}", 26, LANE[key], BOLD, "rm")
     jev = data["cost"][0][2]
     if any("projected" in label for _, label, _ in data["cost"]):
         text(d, (90, 700), "Projected: no Fable run yet; assumes it writes as many output tokens as Opus 5.", 18, DIM)
