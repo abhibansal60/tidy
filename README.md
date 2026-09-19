@@ -1,0 +1,149 @@
+# Jev subscription health experiment
+
+A personal attention-management experiment: learn what Jev's bounded judgments
+can tell us about a subscription feed, then calibrate them against the owner's
+decisions. Codex helps build the application; deterministic code runs it.
+
+**Current phase: read-only subscription inventory.** There is no unsubscribe,
+subscribe, scoring, or automatic review action in the new application yet.
+
+## Run locally
+
+Tested with Python 3.14.7. Use the existing `.venv`, or create one and install the
+pinned environment:
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m jev_manager --help
+```
+
+The application runs from the project directory. SQLite, OAuth credentials, and
+local configuration live under `.jev/` by default. `--data-dir` selects a separate
+account's state and must precede the command. The account is bound to both the
+verified Google subject/email and the authorized YouTube channel ID.
+
+## Import the old experiment
+
+On the original machine:
+
+```bash
+.venv/bin/python -m jev_manager import-legacy
+.venv/bin/python -m jev_manager report
+```
+
+Other locations can be supplied with `--csv` and `--results`. This command makes
+no network calls. It imports the CSV and original result records into SQLite,
+identified by a hash of both source files. Repeating the import does not create
+duplicates. Legacy records are observations, not live subscription state or
+approved decisions. Missing probabilities, model version, and evidence stay
+missing.
+
+`rank.py` remains the historical experiment. It fetches via yt-dlp, spends Jev
+tokens, and overwrites root-level results. It is not called by the manager.
+The original local artifacts have a private checksummed backup under
+`data/baseline/`. Neither private artifacts nor that backup are tracked in Git.
+
+## Connect YouTube (one-time owner setup)
+
+1. Create/select a project in [Google Cloud Console](https://console.cloud.google.com/).
+2. Enable **YouTube Data API v3**.
+3. Configure Google Auth Platform's consent screen. For an external app in
+   Testing, add your own Google account as a test user.
+4. Create an OAuth client with application type **Desktop app**. Download its
+   JSON to `secrets/client_secret.json` inside this project, or pass another
+   path using `auth --client-secrets /path/to/client.json`.
+5. Copy `config.example.json` to `.jev/config.json`, setting `expected_email`
+   to the Google account you intend to manage. On the original machine this
+   private configuration has already been prepared.
+6. Run authorization, select the intended personal YouTube identity, then sync:
+
+```bash
+.venv/bin/python -m jev_manager auth
+.venv/bin/python -m jev_manager sync --max-units 100
+.venv/bin/python -m jev_manager report
+```
+
+OAuth uses Google's library, a local loopback callback, PKCE, and state validation.
+Scopes are YouTube read-only plus OpenID/email to verify the selected account;
+broader grants are rejected. `--no-browser` prints the authorization URL instead
+of opening it. The browser must reach the same machine's loopback listener; a
+remote shell may need local execution or port forwarding. The callback expires
+after three minutes. Never paste tokens or callback URLs into chat.
+
+Credentials are stored atomically with mode 0600. The verified email must match
+configuration, and later runs must match the database's Google and YouTube
+identities. Choosing another Brand Account does not silently replace inventory.
+
+An external OAuth app in Testing receives a refresh token that normally expires
+after seven days for these scopes. Reauthorize when necessary; revisit app
+publishing configuration before unattended scheduling. Official references:
+[desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app),
+[refresh tokens](https://developers.google.com/identity/protocols/oauth2).
+
+The inventory commands never read the TypeSafe API key. The owner has rotated the
+exposed historical key; future Jev calls will use the private `../.env` file.
+
+## Inventory behavior and quota
+
+- All YouTube requests are GET requests for channels or subscriptions.
+- Subscription collection paginates with 50 items per request and stores the
+  subscription ID separately from the channel ID.
+- Only a complete collection replaces current inventory. Malformed responses,
+  failed pages, pagination loops, duplicate channels, wrong-account responses,
+  or exhausted budgets leave the last successful inventory intact.
+- A missing channel means absent from the observed subscription list, not dead,
+  low quality, or deleted by this application. Results are a point-in-time
+  observation; avoid editing subscriptions while a sync is running.
+- `--max-units` caps YouTube request attempts for a sync. Identity lookup costs
+  one unit; each subscription page costs one. Retries count against this local
+  estimate. A 383-subscription sync normally costs nine units, plus a separate
+  one-unit check during initial authorization. Userinfo/OAuth are outside the
+  YouTube quota. Other applications may share your project quota.
+- Failed attempts retain an error category and estimated quota use. Reports
+  distinguish the latest attempt from the last successful snapshot.
+- API subscription metadata expires after 30 days and is purged when a command
+  opens the database. An expired snapshot is not presented as current. This is
+  on-use cleanup, not a background retention service; periodic cleanup/refresh
+  is needed if API data remains stored while the app is idle for longer.
+
+References: [subscriptions.list](https://developers.google.com/youtube/v3/docs/subscriptions/list),
+[quota costs](https://developers.google.com/youtube/v3/determine_quota_cost).
+
+## Jev experiments next
+
+The old three-question experiment is a baseline, not a required architecture.
+Its combined score conflated relevance, depth, and sensational packaging; it
+saved only four titles and discarded distributions/confidence. Preserve those
+lessons, not those limitations.
+
+After inspecting real inventory, use a small sample of channels to compare
+bounded schemas. Record the hypothesis, exact state/questions, model version,
+probability distributions, latency, token usage, and the owner's independent
+labels. Hold some channels out of prompt/threshold tuning. Distinguish model
+confidence, evidence completeness, and actual agreement with user preferences.
+
+Metadata can support topic and packaging judgments. It cannot establish actual
+video depth or originality. Jev is text-only; the official YouTube caption API
+requires video-edit permission. A small, honest experiment is preferable to a
+dashboard full of unsupported precision.
+
+YouTube's [developer policies](https://developers.google.com/youtube/terms/developer-policies)
+restrict derived data and require metadata refresh/deletion. The
+[additional metrics amendment](https://developers.google.com/youtube/terms/derived-metrics-policy)
+provides a conditional route for certain analytics uses. Eligibility for this
+personal experiment and retention of future evaluation payloads are unresolved;
+API-fed scoring is not implemented yet. Scraping is not a policy workaround.
+
+Later increments: cached evidence pilot; Jev evaluation comparison; action report;
+manual review/calibration; approved mutations with safeguards; local dashboard;
+longitudinal drift; discovery. Automatic mutations require separate authorization.
+
+## Sharing the learning
+
+Code and synthetic tests are separate from private account and subscription data.
+For a future post, report both successes and failures, compare schemas on the same
+evidence, state sample limitations, and avoid claiming universal channel quality.
+Nothing has been published. Review tracked files and outputs before sharing;
+the CLI report includes private channel IDs.
