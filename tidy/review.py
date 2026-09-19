@@ -90,7 +90,7 @@ def sample_for_labeling(db, judgments, k):
 
 def derive(db, profile, now=None):
     """Proposals from stored samples and cached judgments; channels without a judgment are left out."""
-    key = judge.interests_key(profile["interests"])
+    key = judge.interests_key(profile["interests"], profile["viewing_habits"])
     samples, judgments = [], []
     for s in store.latest_samples(db, now=now):
         j = store.get_judgment(db, s.evidence_hash, profile["schema_id"], key, now)

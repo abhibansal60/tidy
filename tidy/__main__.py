@@ -62,6 +62,7 @@ def main(argv=None):
     jev = commands.add_parser("judge", help="Schema experiment on stored samples: dry run by default; --execute calls Jev")
     jev.add_argument("--schemas", nargs="+", required=True, choices=sorted(judge.SCHEMAS))
     jev.add_argument("--interests", default=judge.DEFAULT_INTERESTS)
+    jev.add_argument("--habits", default=None, help="Owner viewing habits; defaults to profile.json viewing_habits")
     jev.add_argument("--execute", action="store_true")
     commands.add_parser("propose", help="Offline: Markdown report of proposals from stored samples and judgments")
     commands.add_parser("gate", help="Offline: agreement with owner labels and calibration gate status")
@@ -120,11 +121,12 @@ def main(argv=None):
             output = {**pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None, args.window),
                       "executes": False}
         elif args.command == "judge":
+            habits = args.habits if args.habits is not None else profile.load(args.data_dir / "profile.json")["viewing_habits"]
             if not args.execute:
-                output = experiment.plan(db, args.schemas, args.interests)
+                output = experiment.plan(db, args.schemas, args.interests, habits=habits)
             else:
                 with experiment.typesafe_client() as client:
-                    output = experiment.run(db, client, args.schemas, args.interests)
+                    output = experiment.run(db, client, args.schemas, args.interests, habits=habits)
         elif args.command == "unsubscribe" and not args.execute:
             output = mutate.unsubscribe(db, None, None, False)
         elif args.command in ("act", "resubscribe") and not args.execute:

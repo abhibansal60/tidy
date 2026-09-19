@@ -8,6 +8,7 @@ from .judge import DEFAULT_INTERESTS
 # Scores are on Jev's 0-3 scale; packaging_risk and evidence_sufficiency are 0-1 noul values.
 DEFAULTS = {
     "interests": DEFAULT_INTERESTS,
+    "viewing_habits": "",  # what the owner actually watches: languages, formats, lengths, when; feeds watch_likelihood
     "schema_id": "titles-desc-v1",
     "thresholds": {"relevance_low": 1.0, "value_low": 1.0, "keep_min": 2.0, "packaging_high": 0.7,
                    "sufficiency_min": 0.5, "min_confidence": 0.5, "stale_days": 180},
@@ -33,7 +34,7 @@ def load(path):
                 _number(item, f"{key}.{name}", type(default[name]))
         elif isinstance(default, int):
             _number(value, key, int)
-        elif not isinstance(value, str) or not value.strip():
+        elif not isinstance(value, str) or (not value.strip() and key != "viewing_habits"):
             raise ValueError(f"profile {key} must be non-empty text.")
         merged[key] = value
     if not 0 <= merged["gate"]["min_agreement"] <= 1:

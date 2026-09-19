@@ -12,9 +12,9 @@ from . import judge as jev, store
 FLAG = {"score": 0.5, "noul": 0.3}  # absolute difference at which two schemas "disagree"
 
 
-def plan(db, schema_ids, interests, now=None):
+def plan(db, schema_ids, interests, now=None, habits=""):
     samples = store.latest_samples(db, now=now)
-    chars = sum(len(json.dumps(jev._state(s, interests, jev.SCHEMAS[i]["descriptions"])))
+    chars = sum(len(json.dumps(jev._state(s, interests, jev.SCHEMAS[i]["descriptions"], habits, jev.SCHEMAS[i].get("facts", False))))
                 for i in schema_ids for s in samples)
     return {"samples": len(samples), "schemas": list(schema_ids), "calls": len(samples) * len(schema_ids),
             "estimated_input_tokens": chars // 4, "executes": False}
@@ -49,14 +49,14 @@ class _Counting:
         return self.client.system_one(**kw)
 
 
-def run(db, client, schema_ids, interests, now=None):
+def run(db, client, schema_ids, interests, now=None, habits=""):
     started = time.monotonic()
     samples = store.latest_samples(db, now=now or datetime.now(timezone.utc))
     report = {"samples": len(samples), "interests": interests, "schemas": {},
               "channels": {s.channel_id: {"schemas": {}, "disagreements": {}} for s in samples}}
     for schema_id in schema_ids:
         counting = _Counting(client)
-        result = jev.judge(counting, samples, schema_id, interests, db=db, now=now)
+        result = jev.judge(counting, samples, schema_id, interests, db=db, now=now, habits=habits)
         paid = [j for j in result.judgments if j.channel_id in result.fresh]  # cached judgments cost nothing now
         times = [j.latency_ms for j in paid]
         report["schemas"][schema_id] = {

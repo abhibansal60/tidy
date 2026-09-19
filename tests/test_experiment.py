@@ -59,6 +59,12 @@ class ExperimentTests(unittest.TestCase):
         self.assertGreaterEqual(totals["latency_ms_max"], 0)
         self.assertGreaterEqual(report["wall_ms"], 0)
 
+    def test_habits_reach_jev_for_the_watch_schema(self):
+        experiment.run(self.db, self.client, ["titles-v2"], "x", now=NOW, habits="short explainers, Hindi or English")
+
+        state = self.client.system_one.call_args.kwargs["state"]
+        self.assertEqual(state["owner_viewing_habits"], "short explainers, Hindi or English")
+
     def test_repeat_run_is_all_cache_hits_and_costs_no_calls(self):
         self.run_both()
         self.client.system_one.reset_mock()

@@ -123,6 +123,58 @@ class SchemaComparisonTests(unittest.TestCase):
         self.assertEqual(sorted(SCHEMAS["titles-v1"]["questions"]), sorted(SCHEMAS["titles-desc-v1"]["questions"]))
 
 
+class WatchFitTests(unittest.TestCase):
+    def three_video_sample(self):
+        original = sample(channel="chanA")
+        base = original.videos[0]
+        original.videos = [
+            {**base, "id": "v1", "published_at": "2026-09-01T00:00:00Z", "duration": "PT10M"},
+            {**base, "id": "v2", "published_at": "2026-08-22T00:00:00Z", "duration": "PT45S"},
+            {**base, "id": "v3", "published_at": "2026-08-12T00:00:00Z", "duration": "PT30M"}]
+        return original
+
+    def state_for(self, schema_id, **kwargs):
+        client = FakeClient()
+        judge(client, [self.three_video_sample()], schema_id, **kwargs)
+        return client.system_one.call_args
+
+    def test_v2_adds_code_computed_channel_facts_and_owner_habits(self):
+        call = self.state_for("titles-v2", habits="watches short explainers on the commute")
+
+        state = call.kwargs["state"]
+        self.assertEqual(state["owner_viewing_habits"], "watches short explainers on the commute")
+        self.assertEqual(state["channel_facts"], {"uploads_per_month": 4.5, "days_since_last_upload": 19,
+                                                  "short_videos": 1, "recent_videos": 3, "median_minutes": 10.0})
+        self.assertIn("watch_likelihood", call.kwargs["questions"])
+
+    def test_v1_state_is_unchanged_by_the_new_schema(self):
+        state = self.state_for("titles-v1", habits="ignored").kwargs["state"]
+
+        self.assertNotIn("channel_facts", state)
+        self.assertNotIn("owner_viewing_habits", state)
+        self.assertNotIn("watch_likelihood", SCHEMAS["titles-v1"]["questions"])
+
+
+class CachedHabitsTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = store.connect(Path(self.temp.name) / "inventory.sqlite3")
+
+    def tearDown(self):
+        self.db.close()
+        self.temp.cleanup()
+
+    def test_changed_habits_rejudge_but_empty_habits_keep_the_old_cache_key(self):
+        client = FakeClient()
+        judge(client, [sample()], "titles-v2", habits="a", db=self.db, now=NOW)
+        judge(client, [sample()], "titles-v2", habits="a", db=self.db, now=NOW)
+        judge(client, [sample()], "titles-v2", habits="b", db=self.db, now=NOW)
+        self.assertEqual(client.system_one.call_count, 2)
+
+        from tidy.judge import interests_key
+        self.assertEqual(interests_key("x"), interests_key("x", ""))
+
+
 class FailureAndSpeedTests(unittest.TestCase):
     def test_a_failing_sample_is_reported_and_others_still_judged_in_order(self):
         def reply(**kw):
