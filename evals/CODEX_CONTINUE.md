@@ -1,20 +1,19 @@
-# Codex continuation: finish the Astra and Sol evals
+# Codex task: finish the model evals (spend as little quota as possible)
 
-Read `evals/CODEX_PROMPT.md` first; every constraint there still applies (no channel names or IDs in reports, never read `data/`, `.env`, `secrets/` or token files, do not modify `tidy/`, no commits of private outputs, no `--execute` of Tidy mutations, only the named models).
+Repo `/home/abhi/code/jev`. `evals/codex_baseline.py` runs one model over the 110 stored channels through `codex exec` and writes `.tidy/eval_codex_<model>_<effort|default>.json`. Sol is complete. Astra has 42 of 110 answered (68 failed on quota). Terra and Luna are not run.
 
-## State when this was written
-- `evals/codex_baseline.py` and `tests/test_codex_baseline.py` exist and are committed. The full suite passes.
-- `.tidy/eval_codex_gpt-5.6-sol_default.json`: complete, 110 of 110 channels.
-- `.tidy/eval_codex_gpt-6-astra_default.json`: partial, 42 of 110 answered; 68 failed when Codex quota ran out.
-- No low-effort pass, no repeatability run and no labeled-accuracy run exists for either model yet.
+## Rules
+- Private data: never read or print `data/`, `.env`, `secrets/`, `.tidy/token*.json`; no channel names or IDs in output; do not touch `tidy/` or the database; no commits, no pushes; only these models: `gpt-6-astra`, `gpt-5.6-terra`, `gpt-5.6-luna`.
+- Save your own quota: do not re-read files you already read, do not print result JSON or logs (summaries only, `--quiet`-style: redirect noisy output to a file and print counts), run the test suite once at the end and once after the code change, and do not explore beyond the files named here.
+- If a run hits quota, stop the run, keep the partial file, and report. Do not retry in a loop.
 
-## Do, in order
-1. **Resume support (TDD, small).** Add `--resume` to `evals/codex_baseline.py`: when `--out` (or the default file) exists, keep every channel that already has `answers` and ask only for the rest, then write the merged file with the same shape and the original channel order. Failing test with a fake `ask_fn` first (assert only the failed channels are re-asked). Run the full suite.
-2. **Finish Astra.** `python -m evals.codex_baseline --model gpt-6-astra --resume`. If quota runs out again, stop, keep the merged partial file, and report the counts and the error category only.
-3. **Terra and Luna.** After Astra is complete, run `gpt-5.6-terra` and `gpt-5.6-luna` at default effort the same way (`--resume` applies). Do this before any low-effort pass; stop cleanly if quota runs low and report what finished.
-4. **Low-effort passes** for both models (`--effort low`), if the CLI accepts an effort setting; name files by model and effort.
-5. **Repeatability** for each model: the first 30 channels sorted by channel ID, two runs, as `evals/repeat.py` does for Claude. Write `.tidy/eval_repeat_codex_<model>.json`.
-6. **Compare:** `python -m evals.compare .tidy/experiment_2.json <every .tidy/eval_*.json>` then `python -m evals.labeled_accuracy` with the same files. Paste both outputs.
+## Steps, in priority order (stop after any step if quota is low)
+1. **Add `--resume` (TDD, ~15 lines).** If the output file exists, keep every channel that already has `answers`, ask only for the others, write the merged file in the original channel order and same shape. One failing test with a fake `ask_fn` first (only failed channels are re-asked).
+2. **Astra:** `python -m evals.codex_baseline --model gpt-6-astra --resume`
+3. **Terra:** `python -m evals.codex_baseline --model gpt-5.6-terra`
+4. **Luna:** `python -m evals.codex_baseline --model gpt-5.6-luna`
+5. **Repeatability (only if quota remains):** for Astra, Terra and Luna, the first 30 channels sorted by channel ID, twice (as `evals/repeat.py` does for Claude); write `.tidy/eval_repeat_codex_<model>.json`. Skip Sol's low-effort and all other effort passes.
+6. **Compare:** `python -m evals.compare .tidy/experiment_2.json .tidy/eval_*.json` and `python -m evals.labeled_accuracy .tidy/experiment_2.json .tidy/eval_*.json`. Keep only the final tables.
 
-## Report (plain text, short)
-Per model: channels answered, error categories, wall time, per-call median and p95, tokens, cost or why null, rank agreement with Jev per dimension, repeatability, labeled-accuracy AUCs with intervals. List anything not run and why.
+## Report (plain text, under 25 lines)
+Per model: channels answered, error categories with counts, whole-run wall time, per-call median and p95, tokens per channel (input, cached, output), cost (or `null` for Codex), rank agreement with Jev per dimension, repeatability, labeled-accuracy AUC with interval. List anything not run and why. No channel names.
