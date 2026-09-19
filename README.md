@@ -105,6 +105,17 @@ retries an ambiguous outcome: it marks it `unknown` and reconciles against the l
 list on the next run. A channel re-subscribed under a new ID is skipped and needs
 fresh approval. The read-only token never gains write scope.
 
+## Evidence pilot
+
+```bash
+.venv/bin/python -m tidy collect --channels CHANNEL_ID...     # dry run, offline: plan and quota estimate
+.venv/bin/python -m tidy collect --channels CHANNEL_ID... --execute
+```
+
+Collects the latest 12 uploads per channel with the read-only token (about 3 quota
+units per channel), adds the channels named in `data/owner_labels.json` by title,
+and stores dated evidence samples that expire after 30 days. Nothing is sent to Jev yet.
+
 ## Inventory behavior and quota
 
 - All YouTube requests are GET requests for channels or subscriptions.

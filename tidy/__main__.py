@@ -8,7 +8,7 @@ from google.auth.exceptions import GoogleAuthError
 from oauthlib.oauth2 import OAuth2Error
 import requests
 
-from . import mutate, store
+from . import mutate, pilot, store
 from .youtube import APIError, YouTube, authorize, load_credentials, save_credentials, session_for
 
 
@@ -42,6 +42,13 @@ def main(argv=None):
     auth.add_argument("--write", action="store_true", help="Authorize YouTube write access into a separate token")
     live = commands.add_parser("sync", help="Fetch all live subscriptions, then atomically update inventory")
     live.add_argument("--max-units", type=int, default=100)
+    collect = commands.add_parser("collect", help="Evidence pilot: dry run by default; --execute fetches and stores samples")
+    collect.add_argument("--channels", nargs="*", default=[], help="Channel IDs to include")
+    collect.add_argument("--labels", type=Path, default=Path("data/owner_labels.json"),
+                         help="Owner labels file; its channels are added by title (skipped if missing)")
+    collect.add_argument("--window", type=int, default=12, help="Latest uploads per channel")
+    collect.add_argument("--max-units", type=int, default=100)
+    collect.add_argument("--execute", action="store_true")
     commands.add_parser("report", help="Show baseline/live counts and differences as JSON")
     approve = commands.add_parser("approve", help="Record owner approval to unsubscribe from active channels")
     approve.add_argument("channel_ids", nargs="+")
@@ -61,6 +68,9 @@ def main(argv=None):
             output = store.report(db)
         elif args.command == "approve":
             output = mutate.approve(db, args.channel_ids, args.note)
+        elif args.command == "collect" and not args.execute:
+            output = {**pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None, args.window),
+                      "executes": False}
         elif args.command == "unsubscribe" and not args.execute:
             output = mutate.unsubscribe(db, None, None, False)
         else:
@@ -88,7 +98,11 @@ def main(argv=None):
                     raise ValueError("No OAuth token. Run auth first; see README.")
                 credentials = load_credentials(token_path, write)
                 with session_for(credentials) as session:
-                    if args.command == "unsubscribe":
+                    if args.command == "collect":
+                        chosen = pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None,
+                                            args.window)["channels"]
+                        output = pilot.run(db, YouTube(session, args.max_units), chosen, args.window)
+                    elif args.command == "unsubscribe":
                         output = mutate.unsubscribe(db, YouTube(session, args.max_units), email, True)
                     else:
                         output = sync(db, YouTube(session, args.max_units), email)

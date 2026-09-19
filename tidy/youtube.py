@@ -95,7 +95,7 @@ class YouTube:
         for attempt in range(3):
             if is_youtube:
                 if self.units >= self.max_units:
-                    raise APIError("Local quota budget reached; inventory not replaced.")
+                    raise APIError("Local quota budget reached.")
                 self.units += 1
             try:
                 response = self.session.get(API + resource if is_youtube else USERINFO,
