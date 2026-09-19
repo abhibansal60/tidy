@@ -89,8 +89,8 @@ class YouTube:
 
     def get(self, resource, **params):
         # No user-controlled URL, HTTP method, or mutation endpoint.
-        if resource not in ("channels", "subscriptions", "userinfo"):
-            raise ValueError("Only read-only inventory endpoints are supported.")
+        if resource not in ("channels", "subscriptions", "userinfo", "playlistItems", "videos"):
+            raise ValueError("Only read-only endpoints are supported.")
         is_youtube = resource != "userinfo"
         for attempt in range(3):
             if is_youtube:
