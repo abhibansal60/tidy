@@ -162,6 +162,33 @@ class CliTests(unittest.TestCase):
 
         self.assertIn("on trial", out)
 
+    def test_sheet_import_records_filled_verdicts_skips_blanks_and_is_repeatable(self):
+        path = self.dir / "sheet.json"
+        path.write_text(json.dumps({"channels": [
+            {"channel_id": "chanA", "verdict": "drop", "note": "dead channel"},
+            {"channel_id": "chanB", "verdict": "", "note": ""}]}))
+
+        first = json.loads(self.run_cli("labels", "sheet", str(path))[1])
+        again = json.loads(self.run_cli("labels", "sheet", str(path))[1])
+
+        self.assertEqual(first, {"imported": 1, "skipped": 1})
+        self.assertEqual(again, {"imported": 0, "skipped": 1})
+        db = store.connect(self.dir / "inventory.sqlite3")
+        self.assertEqual(review.current_labels(db), {"chanA": "drop"})
+        db.close()
+
+    def test_sheet_with_a_bad_verdict_applies_nothing(self):
+        path = self.dir / "sheet.json"
+        path.write_text(json.dumps({"channels": [
+            {"channel_id": "chanA", "verdict": "keep"}, {"channel_id": "chanB", "verdict": "remove"}]}))
+
+        code, _ = self.run_cli("labels", "sheet", str(path))
+
+        self.assertEqual(code, 1)
+        db = store.connect(self.dir / "inventory.sqlite3")
+        self.assertEqual(review.current_labels(db), {})
+        db.close()
+
     def test_labels_import(self):
         path = self.dir / "l.json"
         path.write_text(json.dumps({"keep": ["alpha labs"], "sloppy": []}))

@@ -24,6 +24,20 @@ def current_labels(db):
     return {r["channel_id"]: r["verdict"] for r in db.execute("SELECT channel_id, verdict FROM owner_labels ORDER BY id")}
 
 
+def import_sheet(db, path):
+    """Owner-edited sheet {"channels": [{channel_id, verdict, note}]}; blank verdicts are skipped, bad ones abort."""
+    rows = json.loads(Path(path).read_text())["channels"]
+    for r in rows:
+        if r.get("verdict") and r["verdict"] not in VERDICTS:
+            raise ValueError(f"Bad verdict {r['verdict']!r} for {r.get('channel_id')}; use keep, drop or unsure.")
+    current, imported = current_labels(db), 0
+    for r in rows:
+        if r.get("verdict") and current.get(r["channel_id"]) != r["verdict"]:
+            label(db, r["channel_id"], r["verdict"], r.get("note", ""), "sheet")
+            imported += 1
+    return {"imported": imported, "skipped": sum(1 for r in rows if not r.get("verdict"))}
+
+
 def import_label_file(db, path):
     """Private format {"keep": [titles], "sloppy": [titles]}, matched to subscriptions by title."""
     data = json.loads(Path(path).read_text())

@@ -70,7 +70,7 @@ def main(argv=None):
     mark.add_argument("verdict", choices=review.VERDICTS)
     mark.add_argument("--note", default="")
     bulk = commands.add_parser("labels", help="Import owner labels from a {keep, sloppy} title file")
-    bulk.add_argument("action", choices=["import"])
+    bulk.add_argument("action", choices=["import", "sheet"])
     bulk.add_argument("path", type=Path)
     commands.add_parser("report", help="Show baseline/live counts and differences as JSON")
     approve = commands.add_parser("approve", help="Record owner approval to unsubscribe from active channels")
@@ -113,7 +113,7 @@ def main(argv=None):
             review.label(db, args.channel_id, args.verdict, args.note)
             output = {"labeled": args.channel_id, "verdict": args.verdict}
         elif args.command == "labels":
-            output = review.import_label_file(db, args.path)
+            output = (review.import_sheet if args.action == "sheet" else review.import_label_file)(db, args.path)
         elif args.command == "approve":
             output = mutate.approve(db, args.channel_ids, args.note)
         elif args.command == "collect" and not args.execute:

@@ -175,6 +175,18 @@ All of these run offline against the local database.
   (REVIEW and unsure labels are excluded) and whether the calibration gate is
   open: at least 30 labels and 85% agreement by default.
 
+## Labeling from a sheet
+
+`tidy labels sheet PATH` reads a JSON file with `{"channels": [{"channel_id", "verdict", "note"}]}`
+and records every filled verdict (`keep`, `drop` or `unsure`); blanks are skipped and one bad verdict
+applies nothing. Repeating it adds nothing new.
+
+## Evals (Claude Code vs Jev)
+
+`python -m evals.claude_baseline --model haiku --effort low` answers the same questions through
+`claude -p`; `python -m evals.repeat` measures run-to-run change; `python -m evals.compare JEV.json CLAUDE.json...`
+prints speed, cost and agreement. Outputs stay under `.tidy/` (private).
+
 ## Inventory behavior and quota
 
 - All YouTube requests are GET requests for channels or subscriptions.
