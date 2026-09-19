@@ -18,7 +18,7 @@ Video: `.tidy/tidy_demo.mp4` (1280x720, about 60 s). GIF: `.tidy/tidy_demo.gif`.
 
 6/ The honest part. I checked every judge against my own keep/drop labels (34 channels). Jev, Opus and Haiku all scored about 0.5, a coin flip. My watch history scored 0.80. Quality is not taste. No model knew what I would actually keep.
 
-7/ So the design: Jev judges (seconds, cents). Code decides (thresholds, caps, budgets). I approve. 11 channels unsubscribed, each signed off. A discovery pass proposed 13 channels to add; I took none.
+7/ So the design: Jev judges (seconds, cents). Code decides (thresholds, caps, budgets). I approve. 11 channels unsubscribed, each signed off. The same loop reads my watch history to find channels I watch but do not follow: it found 30 and proposed 13 to add. I took none; it proposes, I decide.
 
 8/ Outside numbers agree on direction, not size: independent tests (Every, Pydantic, a customer-support benchmark) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models still ahead on open-ended tasks. Code and method: github.com/abhibansal60/tidy (private for now).
 
@@ -34,7 +34,7 @@ What I measured:
 
 What surprised me: none of them, Jev included, predicted my own keep/drop decisions (about 0.5 on 34 labels). My watch history did (0.80). A judgment about quality is not a judgment about taste.
 
-So Tidy keeps the roles apart: Jev makes the fast, cheap judgment; code owns thresholds, caps and budgets; I approve every change. Eleven unsubscribes, each approved by me. A discovery feature proposed 13 channels to add, and I declined all of them.
+So Tidy keeps the roles apart: Jev makes the fast, cheap judgment; code owns thresholds, caps and budgets; I approve every change. Eleven unsubscribes, each approved by me. A watch-history pass that finds channels I watch but do not follow proposed 13 to add (from 30 candidates); I declined all of them. The loop proposes, I decide.
 
 Takeaway: use a decision model where you need many fast, repeatable calls, keep humans on anything irreversible, and measure against your own labels before trusting any score.
 

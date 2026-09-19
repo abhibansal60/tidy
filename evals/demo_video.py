@@ -178,6 +178,31 @@ def finding(d, t, data):
     text(d, (W // 2, 620), "Fast and consistent is not the same as right for one person.", 30, INK, BOLD, "mm", ease((t - 2.8) / 0.8))
 
 
+def loop(d, t, data):
+    text(d, (90, 70), "One loop keeps the feed current", 36, INK, BOLD)
+    text(d, (90, 122), "Runs when I start it. Prunes what stopped earning its place, finds what I already watch.", 22, DIM)
+    steps = [("Sync", "my subscriptions"), ("Watch history", "Google Takeout, counted by code"),
+             ("Jev judges", "every channel, seconds"), ("Code decides", "thresholds, caps, budgets")]
+    for i, (name, note) in enumerate(steps):
+        x, a = 90 + i * 285, ease((t - 0.5 * i) / 0.6)
+        d.rounded_rectangle((x, 190, x + 250, 300), 12, outline=tuple(int(b + (c - b) * a) for b, c in zip(BG, JEV if i == 2 else DIM)), width=2)
+        text(d, (x + 125, 232), name, 26, JEV if i == 2 else INK, BOLD, "mm", a)
+        text(d, (x + 125, 270), note, 15, DIM, SANS, "mm", a)
+        if i < 3:
+            text(d, (x + 268, 245), "›", 34, DIM, BOLD, "mm", a)
+    a = ease((t - 2.4) / 0.7)
+    for i, (head, body, color) in enumerate((
+            ("Unsubscribe", ("Low quality by Jev AND a second opinion.", "11 channels so far, each approved by me."), (240, 120, 120)),
+            ("Subscribe", ("Watched often, not subscribed, quality above a floor.", "30 candidates found, 13 proposed."), JEV))):
+        x = 90 + i * 570
+        d.rounded_rectangle((x, 360, x + 540, 520), 12, outline=tuple(int(b + (c - b) * a) for b, c in zip(BG, color)), width=2)
+        text(d, (x + 24, 386), head, 30, color, BOLD, alpha=a)
+        for j, line in enumerate(body):
+            text(d, (x + 24, 440 + j * 30), line, 20, INK, SANS, alpha=a)
+    text(d, (W // 2, 600), "Gated autonomy: per-run caps (5 unsubscribes, 3 subscribes), owner-started, never unattended.", 22, DIM, SANS, "mm", ease((t - 3.6) / 0.7))
+    text(d, (W // 2, 650), "The feed stays current without me reviewing 110 channels by hand.", 28, JEV, BOLD, "mm", ease((t - 4.4) / 0.7))
+
+
 def guardrails(d, t, data):
     for i, (word, note) in enumerate((("Jev judges.", "every quality call, in seconds"),
                                       ("Code decides.", "arithmetic, thresholds, caps, budgets"),
@@ -188,7 +213,7 @@ def guardrails(d, t, data):
     text(d, (W // 2, 640), "Tidy · built on Jev (TypeSafe System One)", 26, JEV, SANS, "mm", ease((t - 3) / 0.8))
 
 
-SCENES = [(title, 6.0), (terminal, 5.0), (race, 25.0), (cost, 7.0), (repeat, 6.0), (finding, 7.0), (guardrails, 5.0)]
+SCENES = [(title, 6.0), (terminal, 5.0), (race, 25.0), (cost, 7.0), (repeat, 6.0), (finding, 7.0), (loop, 7.0), (guardrails, 5.0)]
 FADE = 0.4
 
 
