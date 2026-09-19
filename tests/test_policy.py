@@ -1,0 +1,59 @@
+from dataclasses import replace
+from pathlib import Path
+import unittest
+
+from tidy import policy, profile
+from tidy.judge import Judgment
+from test_evidence_store import sample
+
+PROFILE = profile.load(Path("/nonexistent/profile.json"))  # defaults: low<1.0, keep>=2.0, packaging>=0.7, sufficiency>=0.5, confidence>=0.5
+
+
+def judgment(rel=3.0, val=3.0, pack=0.1, suff=0.9, rel_conf=0.9, val_conf=0.9, evidence_hash="h1"):
+    answers = {"relevance": {"score": rel, "confidence": rel_conf}, "apparent_value": {"score": val, "confidence": val_conf},
+               "packaging_risk": {"noul": pack}, "evidence_sufficiency": {"noul": suff}}
+    return Judgment("chanA", evidence_hash, "titles-v1", "m", answers, {}, 1, "2026-09-20T00:00:00+00:00")
+
+
+class PolicyTests(unittest.TestCase):
+    # (name, judgment kwargs, sample overrides, status, expected action, signal fragments that must appear)
+    TABLE = [
+        ("strong channel", {}, {}, "active", "KEEP", []),
+        ("low relevance and low value, evidence sufficient", {"rel": 0.4, "val": 0.6}, {}, "active", "UNSUBSCRIBE",
+         ["relevance low (0.4)", "value low (0.6)"]),
+        ("same but thin evidence never unsubscribes", {"rel": 0.4, "val": 0.6, "suff": 0.2}, {}, "active", "REVIEW",
+         ["evidence thin (0.2)"]),
+        ("entertainment: low relevance alone", {"rel": 0.2}, {}, "active", "WATCH", ["relevance low (0.2)"]),
+        ("low value alone needs a look", {"val": 0.5}, {}, "active", "REVIEW", ["value low (0.5)"]),
+        ("packaging alone never unsubscribes", {"pack": 0.9}, {}, "active", "REVIEW", ["packaging high (0.9)"]),
+        ("packaging plus low relevance is still not two quality signals", {"rel": 0.5, "pack": 0.9}, {}, "active",
+         "REVIEW", ["packaging high (0.9)"]),
+        ("all three negative", {"rel": 0.5, "val": 0.5, "pack": 0.9}, {}, "active", "UNSUBSCRIBE",
+         ["relevance low (0.5)", "value low (0.5)", "packaging high (0.9)"]),
+        ("unsure distributions block unsubscribe", {"rel": 0.5, "val": 0.5, "rel_conf": 0.3}, {}, "active", "REVIEW",
+         ["relevance confidence low (0.3)"]),
+        ("middling everything", {"rel": 1.5, "val": 1.5}, {}, "active", "WATCH", []),
+        ("trial follows the same rules", {"rel": 0.4, "val": 0.6}, {}, "trial", "UNSUBSCRIBE", ["on trial"]),
+        ("stale channel is flagged, not negative", {}, {"newest_published_at": "2025-08-01T00:00:00Z"}, "active",
+         "KEEP", ["stale: newest upload 415 days old"]),
+        ("empty channel is flagged and reviewed", {"suff": 0.1},
+         {"videos": [], "newest_published_at": None, "coverage": {"requested": 12, "collected": 0, "unavailable": 0}},
+         "active", "REVIEW", ["no recent uploads"]),
+    ]
+
+    def test_table(self):
+        for name, jkw, skw, status, action, fragments in self.TABLE:
+            with self.subTest(name):
+                p = policy.propose(judgment(**jkw), replace(sample(), **skw), PROFILE, status)
+                self.assertEqual(p.action, action)
+                for fragment in fragments:
+                    self.assertIn(fragment, p.signals)
+
+    def test_proposal_is_tied_to_evidence_and_policy_version(self):
+        p = policy.propose(judgment(evidence_hash="abc"), sample(), PROFILE, "active")
+        self.assertEqual((p.channel_id, p.evidence_hash, p.policy_version), ("chanA", "abc", policy.POLICY_VERSION))
+
+    def test_thresholds_come_from_profile(self):
+        strict = {**PROFILE, "thresholds": {**PROFILE["thresholds"], "relevance_low": 2.5}}
+        self.assertEqual(policy.propose(judgment(rel=2.0, val=0.5), sample(), PROFILE, "active").action, "REVIEW")
+        self.assertEqual(policy.propose(judgment(rel=2.0, val=0.5), sample(), strict, "active").action, "UNSUBSCRIBE")
