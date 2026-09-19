@@ -7,4 +7,4 @@ Every quality judgment comes from Jev as typed probability distributions. Code o
 - Judgments are keyed by evidence hash. Unchanged evidence is not re-judged; a policy change re-derives proposals with zero Jev calls.
 - Channels judged in parallel; a cheap first pass on stale or unchanged channels, deeper evidence only when evidence sufficiency is low.
 
-Alternatives rejected: a hand-tuned heuristic score (conflates dimensions, cannot read meaning) and a general LLM prompt-and-parse loop (slower, costlier, no calibrated distributions). Cached judgments about API-derived evidence expire with YouTube's refresh window; owner labels do not.
+Alternatives rejected: a hand-tuned heuristic score (conflates dimensions, cannot read meaning) and a general LLM prompt-and-parse loop (slower, costlier, no calibrated distributions). Judgments about API-derived evidence are derived data: the cache and the evidence it keys on expire within 30 days of the source fetch (`docs/research/youtube-api-policy.md`). Owner labels are the owner's own data and do not expire. Storing judgments longer needs YouTube's derived-metrics amendment, which is unresolved for a personal project.

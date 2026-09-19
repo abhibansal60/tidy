@@ -27,6 +27,10 @@ is not tracked. It does not override the decisions below.
   (ADR 0005): automatic actions run only in an owner-started run, per action type
   only after the calibration gate holds, within caps, never on one dimension
   alone. Until a gate holds, propose only and collect owner labels.
+- Retention: cached API metadata, evidence samples and Jev judgments about them
+  expire within 30 days of the fetch; a `purge` command drops them (and channels
+  that turn private or missing). Owner labels are kept. No scraping. Details and
+  open questions in `docs/research/youtube-api-policy.md`.
 - Reusability is a later goal, not day 1: others may run this with their own
   credentials. Keep owner taste (topics, thresholds, caps) in per-user config and
   labels, not code, and per-user state under `--data-dir`. No hosted multi-user
