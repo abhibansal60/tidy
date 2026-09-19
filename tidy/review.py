@@ -1,11 +1,10 @@
 """Owner review: labels, agreement with proposals (the calibration gate), labeling sample, Markdown report."""
 
 from datetime import datetime
-import hashlib
 import json
 from pathlib import Path
 
-from . import policy, store
+from . import judge, policy, store
 
 VERDICTS = ("keep", "drop", "unsure")
 AGREES = {"KEEP": "keep", "WATCH": "keep", "UNSUBSCRIBE": "drop"}  # REVIEW and unsure are excluded
@@ -75,21 +74,18 @@ def sample_for_labeling(db, judgments, k):
     return picked
 
 
-def interests_key(interests):
-    # Must match the cache key judge() stores judgments under.
-    return hashlib.sha256(interests.encode()).hexdigest()[:16]
-
-
 def derive(db, profile, now=None):
     """Proposals from stored samples and cached judgments; channels without a judgment are left out."""
-    key = interests_key(profile["interests"])
+    key = judge.interests_key(profile["interests"])
     samples, judgments = [], []
     for s in store.latest_samples(db, now=now):
         j = store.get_judgment(db, s.evidence_hash, profile["schema_id"], key, now)
         if j:
             samples.append(s)
             judgments.append(j)
-    proposals = [policy.propose(j, s, profile) for j, s in zip(judgments, samples)]  # status: trials arrive with issue #5
+    trials = {r[0] for r in db.execute("SELECT channel_id FROM trials")}
+    proposals = [policy.propose(j, s, profile, "trial" if j.channel_id in trials else "active")
+                 for j, s in zip(judgments, samples)]
     return proposals, judgments, samples
 
 

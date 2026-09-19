@@ -60,6 +60,10 @@ class Judgment:
 DEFAULT_INTERESTS = "AI, software engineering and technical explainers; some music and comedy are welcome"
 
 
+def interests_key(interests):
+    return hashlib.sha256(interests.encode()).hexdigest()[:16]
+
+
 def _minutes(iso_duration):
     m = re.fullmatch(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", iso_duration or "")
     return int(m[1] or 0) * 60 + int(m[2] or 0) if m else None
@@ -90,11 +94,12 @@ def _state(sample, interests, descriptions):
 class JudgeResult:
     judgments: list  # input order, failed samples omitted
     errors: dict     # channel_id -> safe message
+    fresh: set = None  # channel_ids actually sent to Jev this run (the rest came from cache)
 
 
 def judge(client, samples, schema_id, interests=DEFAULT_INTERESTS, db=None, now=None, workers=6):
     schema = SCHEMAS[schema_id]
-    key = hashlib.sha256(interests.encode()).hexdigest()[:16]
+    key = interests_key(interests)
     found = {s.channel_id: db and store.get_judgment(db, s.evidence_hash, schema_id, key, now) for s in samples}
     todo = [s for s in samples if not found[s.channel_id]]
 
@@ -106,7 +111,7 @@ def judge(client, samples, schema_id, interests=DEFAULT_INTERESTS, db=None, now=
 
     with ThreadPoolExecutor(workers) as pool:  # ponytail: threads suit ~100 channels; batch/async if it grows
         fresh = dict(zip((s.channel_id for s in todo), pool.map(call, todo)))
-    result = JudgeResult([], {})
+    result = JudgeResult([], {}, set(fresh))
     for s in samples:
         outcome = found[s.channel_id] or fresh[s.channel_id]
         if isinstance(outcome, str):

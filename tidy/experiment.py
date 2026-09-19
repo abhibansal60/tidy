@@ -57,10 +57,11 @@ def run(db, client, schema_ids, interests, now=None):
     for schema_id in schema_ids:
         counting = _Counting(client)
         result = jev.judge(counting, samples, schema_id, interests, db=db, now=now)
-        times = [j.latency_ms for j in result.judgments]
+        paid = [j for j in result.judgments if j.channel_id in result.fresh]  # cached judgments cost nothing now
+        times = [j.latency_ms for j in paid]
         report["schemas"][schema_id] = {
-            "input_tokens": sum(j.usage["input_tokens"] for j in result.judgments),
-            "output_tokens": sum(j.usage["output_tokens"] for j in result.judgments),
+            "input_tokens": sum(j.usage["input_tokens"] for j in paid),
+            "output_tokens": sum(j.usage["output_tokens"] for j in paid),
             "latency_ms_sum": sum(times), "latency_ms_max": max(times, default=0),
             "calls": counting.calls, "cache_hits": len(samples) - counting.calls, "errors": result.errors}
         for j in result.judgments:

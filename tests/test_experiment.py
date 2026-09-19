@@ -67,6 +67,7 @@ class ExperimentTests(unittest.TestCase):
 
         self.assertEqual(self.client.system_one.call_count, 0)
         self.assertEqual({(t["calls"], t["cache_hits"]) for t in report["schemas"].values()}, {(0, 2)})
+        self.assertEqual({(t["input_tokens"], t["latency_ms_sum"]) for t in report["schemas"].values()}, {(0, 0)})
 
     def test_disagreements_flag_at_threshold_with_exact_differences(self):
         d = self.run_both()["channels"]["a"]["disagreements"]["titles-v1|titles-desc-v1"]

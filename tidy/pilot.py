@@ -1,6 +1,7 @@
 """Evidence pilot: choose channels, estimate quota, collect and store samples."""
 
 import json
+from pathlib import Path
 from math import ceil
 
 from . import collector, store
@@ -15,7 +16,7 @@ def plan(db, channel_ids, labels_path, window):
     """Offline: the channels a run would fetch (explicit ones, then owner-labeled by title) and its cost."""
     channels, unresolved = list(channel_ids), []
     if labels_path:
-        labels = json.loads(open(labels_path).read())
+        labels = json.loads(Path(labels_path).read_text())
         by_title = {r["title"].casefold(): r["channel_id"] for r in
                     db.execute("SELECT title, channel_id FROM subscriptions WHERE active=1")}
         for title in labels.get("keep", []) + labels.get("sloppy", []):

@@ -152,6 +152,16 @@ class CliTests(unittest.TestCase):
         stats = json.loads(out)
         self.assertEqual((stats["n"], stats["agreements"], stats["gate"]["open"]), (1, 1, False))
 
+    def test_propose_marks_trial_channels_using_the_trials_table(self):
+        db = store.connect(self.dir / "inventory.sqlite3")
+        with db:
+            db.execute("INSERT INTO trials VALUES ('chanA', 's1', '2026-09-01T00:00:00+00:00', '2026-10-01T00:00:00+00:00')")
+        db.close()
+
+        code, out = self.run_cli("propose")
+
+        self.assertIn("on trial", out)
+
     def test_labels_import(self):
         path = self.dir / "l.json"
         path.write_text(json.dumps({"keep": ["alpha labs"], "sloppy": []}))
