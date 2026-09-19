@@ -73,7 +73,7 @@ class WatchPolicyTests(unittest.TestCase):
 
         self.assertEqual(p.action, "UNSUBSCRIBE")
         self.assertEqual(p.signals, ["value low, Jev (0.3)", "value low, second opinion (0.4)",
-                                     "watched 9 times in 45 days"])
+                                     "watched 9 times in 42 days"])
         self.assertEqual(p.policy_version, "policy-2")
 
     def test_low_quality_without_second_opinion_only_asks_for_one(self):
@@ -91,8 +91,8 @@ class WatchPolicyTests(unittest.TestCase):
         self.assertEqual(self.run_policy(1.4, watched=3).action, "KEEP")
         unwatched = self.run_policy(2.4, watched=0)
         self.assertEqual((unwatched.action, unwatched.signals),
-                         ("REVIEW", ["unwatched in 45 days", "quality high: watch it or drop it"]))
-        self.assertEqual(self.run_policy(1.4, watched=0).signals, ["unwatched in 45 days"])
+                         ("REVIEW", ["unwatched in 42 days", "quality high: watch it or drop it"]))
+        self.assertEqual(self.run_policy(1.4, watched=0).signals, ["unwatched in 42 days"])
 
     def test_window_and_threshold_come_from_the_profile(self):
         custom = {**self.profile, "watch_window_days": 30, "low_quality_value": 0.2}

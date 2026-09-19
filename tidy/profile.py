@@ -13,7 +13,7 @@ DEFAULTS = {
     "thresholds": {"relevance_low": 1.0, "value_low": 1.0, "keep_min": 2.0, "packaging_high": 0.7,
                    "sufficiency_min": 0.5, "min_confidence": 0.5, "stale_days": 180},
     "caps": {"unsubscribe": 5, "subscribe": 3},
-    "watch_window_days": 45,       # how far back "recently watched" looks in the Takeout history
+    "watch_window_days": 42,       # how far back "recently watched" looks in the Takeout history
     "low_quality_value": 0.5,      # Jev and a second opinion must both score value below this to unsubscribe
     "watch_history_path": "",      # Takeout watch-history.html; empty means no watch signal (policy-1)
     "trial_days": 30,
