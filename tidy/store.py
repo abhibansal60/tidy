@@ -47,7 +47,7 @@ def connect(path):
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1, 2):
+    if version not in (0, 1, 2, 3):
         db.close()
         raise ValueError("Database schema is newer than this application.")
     if version == 0:
@@ -99,10 +99,31 @@ def connect(path):
             PRAGMA user_version=2;
             COMMIT;
         """)
+    if version < 3:
+        # Evidence samples are API-derived: they carry their own expiry (docs/research/youtube-api-policy.md).
+        db.executescript("""
+            BEGIN;
+            CREATE TABLE collection_runs (
+                id INTEGER PRIMARY KEY, at TEXT NOT NULL,
+                request_units INTEGER NOT NULL, collected INTEGER NOT NULL, failed INTEGER NOT NULL
+            );
+            CREATE TABLE evidence_samples (
+                channel_id TEXT PRIMARY KEY, run_id INTEGER NOT NULL REFERENCES collection_runs(id),
+                fetched_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+                evidence_hash TEXT NOT NULL, payload TEXT NOT NULL
+            );
+            CREATE TABLE collection_errors (
+                run_id INTEGER NOT NULL REFERENCES collection_runs(id),
+                channel_id TEXT NOT NULL, message TEXT NOT NULL
+            );
+            PRAGMA user_version=3;
+            COMMIT;
+        """)
     # API metadata is a refreshable cache, not a permanent historical archive.
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     with db:
         db.execute("DELETE FROM subscriptions WHERE last_seen < ?", (cutoff,))
+    purge(db)
     return db
 
 
@@ -175,6 +196,46 @@ def save_inventory(db, identity, rows, run_id, request_units):
         db.execute("""UPDATE sync_runs SET finished_at=?, status='complete',
                       request_units=?, subscription_count=? WHERE id=?""",
                    (timestamp, request_units, len(rows), run_id))
+
+
+def save_samples(db, result, request_units, now=None):
+    """Record one collection run; a channel that failed keeps its previous sample."""
+    from dataclasses import asdict
+    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    with db:
+        run = db.execute("INSERT INTO collection_runs (at, request_units, collected, failed) VALUES (?, ?, ?, ?)",
+                         (stamp, request_units, len(result.samples), len(result.errors))).lastrowid
+        for s in result.samples:
+            db.execute("INSERT OR REPLACE INTO evidence_samples VALUES (?, ?, ?, ?, ?, ?)",
+                       (s.channel_id, run, s.fetched_at, s.expires_at, s.evidence_hash, json.dumps(asdict(s))))
+        for channel_id, message in result.errors.items():
+            db.execute("INSERT INTO collection_errors VALUES (?, ?, ?)", (run, channel_id, message))
+    return run
+
+
+def latest_samples(db, channel_ids=None, now=None):
+    from .collector import EvidenceSample  # collector imports youtube, which imports this module
+    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    rows = db.execute("SELECT payload FROM evidence_samples WHERE expires_at > ? ORDER BY channel_id", (stamp,))
+    return [EvidenceSample(**json.loads(r["payload"])) for r in rows
+            if channel_ids is None or json.loads(r["payload"])["channel_id"] in channel_ids]
+
+
+def purge(db, now=None):
+    """Delete evidence samples past their 30-day API retention; returns how many."""
+    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    with db:
+        return db.execute("DELETE FROM evidence_samples WHERE expires_at <= ?", (stamp,)).rowcount
+
+
+def last_run(db):
+    run = db.execute("SELECT id, at, request_units, collected, failed FROM collection_runs ORDER BY id DESC LIMIT 1").fetchone()
+    if run is None:
+        return None
+    errors = {r["channel_id"]: r["message"] for r in
+              db.execute("SELECT channel_id, message FROM collection_errors WHERE run_id=?", (run["id"],))}
+    return {"at": run["at"], "request_units": run["request_units"], "collected": run["collected"],
+            "failed": run["failed"], "errors": errors}
 
 
 def report(db):
