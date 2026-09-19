@@ -187,6 +187,15 @@ applies nothing. Repeating it adds nothing new.
 `claude -p`; `python -m evals.repeat` measures run-to-run change; `python -m evals.compare JEV.json CLAUDE.json...`
 prints speed, cost and agreement. Outputs stay under `.tidy/` (private).
 
+## Policy with watch history and the low-quality cascade
+
+Set `watch_history_path` in `profile.json` (a Google Takeout `watch-history.html`, kept under `data/`) and
+`tidy propose` switches to policy-2: watched in the last `watch_window_days` (default 45) is KEEP; unwatched goes
+to REVIEW; a channel is proposed for UNSUBSCRIBE only when Jev and a second opinion both rate its value below
+`low_quality_value` (default 0.5), whatever its watch count. `tidy escalate` (dry run by default) sends only the
+channels Jev flags to a stronger model (`--model`, default `claude-opus-5`, through Claude Code headless) and stores
+the answers with the evidence's 30-day expiry.
+
 ## Inventory behavior and quota
 
 - All YouTube requests are GET requests for channels or subscriptions.

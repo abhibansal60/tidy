@@ -13,6 +13,9 @@ DEFAULTS = {
     "thresholds": {"relevance_low": 1.0, "value_low": 1.0, "keep_min": 2.0, "packaging_high": 0.7,
                    "sufficiency_min": 0.5, "min_confidence": 0.5, "stale_days": 180},
     "caps": {"unsubscribe": 5, "subscribe": 3},
+    "watch_window_days": 45,       # how far back "recently watched" looks in the Takeout history
+    "low_quality_value": 0.5,      # Jev and a second opinion must both score value below this to unsubscribe
+    "watch_history_path": "",      # Takeout watch-history.html; empty means no watch signal (policy-1)
     "trial_days": 30,
     "gate": {"min_labels": 30, "min_agreement": 0.85},
 }
@@ -32,9 +35,9 @@ def load(path):
             value = {**default, **value}
             for name, item in value.items():
                 _number(item, f"{key}.{name}", type(default[name]))
-        elif isinstance(default, int):
-            _number(value, key, int)
-        elif not isinstance(value, str) or (not value.strip() and key != "viewing_habits"):
+        elif isinstance(default, (int, float)):
+            _number(value, key, type(default))
+        elif not isinstance(value, str) or (not value.strip() and key not in ("viewing_habits", "watch_history_path")):
             raise ValueError(f"profile {key} must be non-empty text.")
         merged[key] = value
     if not 0 <= merged["gate"]["min_agreement"] <= 1:

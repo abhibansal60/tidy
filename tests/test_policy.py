@@ -57,3 +57,46 @@ class PolicyTests(unittest.TestCase):
         strict = {**PROFILE, "thresholds": {**PROFILE["thresholds"], "relevance_low": 2.5}}
         self.assertEqual(policy.propose(judgment(rel=2.0, val=0.5), sample(), PROFILE, "active").action, "REVIEW")
         self.assertEqual(policy.propose(judgment(rel=2.0, val=0.5), sample(), strict, "active").action, "UNSUBSCRIBE")
+
+
+class WatchPolicyTests(unittest.TestCase):
+    """policy-2: revealed watching plus a strict two-opinion low-quality cascade."""
+
+    def setUp(self):
+        self.profile = profile.load(Path("/nonexistent/profile.json"))
+
+    def run_policy(self, val, watched, second=None):
+        return policy.propose_watch(judgment(val=val), sample(), self.profile, watched, second)
+
+    def test_low_quality_confirmed_by_second_opinion_is_unsubscribe_even_if_watched(self):
+        p = self.run_policy(0.3, watched=9, second={"apparent_value": 0.4})
+
+        self.assertEqual(p.action, "UNSUBSCRIBE")
+        self.assertEqual(p.signals, ["value low, Jev (0.3)", "value low, second opinion (0.4)",
+                                     "watched 9 times in 45 days"])
+        self.assertEqual(p.policy_version, "policy-2")
+
+    def test_low_quality_without_second_opinion_only_asks_for_one(self):
+        p = self.run_policy(0.3, watched=0)
+
+        self.assertEqual((p.action, p.signals), ("REVIEW", ["value low, Jev (0.3)", "needs second opinion"]))
+
+    def test_second_opinion_that_disagrees_blocks_the_unsubscribe(self):
+        p = self.run_policy(0.3, watched=0, second={"apparent_value": 0.9})
+
+        self.assertEqual(p.action, "REVIEW")
+        self.assertIn("second opinion disagrees (0.9)", p.signals)
+
+    def test_watched_channels_are_kept_and_unwatched_ones_go_to_review(self):
+        self.assertEqual(self.run_policy(1.4, watched=3).action, "KEEP")
+        unwatched = self.run_policy(2.4, watched=0)
+        self.assertEqual((unwatched.action, unwatched.signals),
+                         ("REVIEW", ["unwatched in 45 days", "quality high: watch it or drop it"]))
+        self.assertEqual(self.run_policy(1.4, watched=0).signals, ["unwatched in 45 days"])
+
+    def test_window_and_threshold_come_from_the_profile(self):
+        custom = {**self.profile, "watch_window_days": 30, "low_quality_value": 0.2}
+
+        p = policy.propose_watch(judgment(val=0.3), sample(), custom, 0)
+
+        self.assertEqual(p.signals, ["unwatched in 30 days"])

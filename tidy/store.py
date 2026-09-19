@@ -47,7 +47,7 @@ def connect(path):
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1, 2, 3, 4, 5, 6):
+    if version not in (0, 1, 2, 3, 4, 5, 6, 7):
         db.close()
         raise ValueError("Database schema is newer than this application.")
     if version == 0:
@@ -158,6 +158,18 @@ def connect(path):
             PRAGMA user_version=6;
             COMMIT;
         """)
+    if version < 7:
+        # Second opinions on flagged channels come from an expensive model; like judgments they expire with the evidence.
+        db.executescript("""
+            BEGIN;
+            CREATE TABLE second_opinions (
+                channel_id TEXT NOT NULL, evidence_hash TEXT NOT NULL, model TEXT NOT NULL,
+                answers TEXT NOT NULL, at TEXT NOT NULL, expires_at TEXT NOT NULL,
+                PRIMARY KEY (channel_id, evidence_hash)
+            );
+            PRAGMA user_version=7;
+            COMMIT;
+        """)
     # API metadata is a refreshable cache, not a permanent historical archive.
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     with db:
@@ -265,6 +277,7 @@ def purge(db, now=None):
     stamp = (now or datetime.now(timezone.utc)).isoformat()
     with db:
         db.execute("DELETE FROM judgments WHERE expires_at <= ?", (stamp,))
+        db.execute("DELETE FROM second_opinions WHERE expires_at <= ?", (stamp,))
         return db.execute("DELETE FROM evidence_samples WHERE expires_at <= ?", (stamp,)).rowcount
 
 
@@ -282,6 +295,19 @@ def get_judgment(db, evidence_hash, schema_id, interests_key, now=None):
     row = db.execute("SELECT payload FROM judgments WHERE evidence_hash=? AND schema_id=? AND interests_key=? "
                      "AND expires_at > ?", (evidence_hash, schema_id, interests_key, stamp)).fetchone()
     return Judgment(**json.loads(row["payload"])) if row else None
+
+
+def put_second_opinion(db, channel_id, evidence_hash, model, answers, expires_at):
+    with db:
+        db.execute("INSERT OR REPLACE INTO second_opinions VALUES (?, ?, ?, ?, ?, ?)",
+                   (channel_id, evidence_hash, model, json.dumps(answers), now(), expires_at))
+
+
+def get_second_opinion(db, channel_id, evidence_hash, at=None):
+    stamp = (at or datetime.now(timezone.utc)).isoformat()
+    row = db.execute("SELECT answers FROM second_opinions WHERE channel_id=? AND evidence_hash=? AND expires_at > ?",
+                     (channel_id, evidence_hash, stamp)).fetchone()
+    return json.loads(row["answers"]) if row else None
 
 
 def last_run(db):

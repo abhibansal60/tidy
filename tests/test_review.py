@@ -12,6 +12,7 @@ from typesafe_sdk import ScoreAnswer
 from tidy import profile, review, store
 from tidy.__main__ import main
 from tidy.collector import CollectResult
+from test_watch_history import cell
 from tidy.judge import judge
 from tidy.proposal import Proposal
 from test_evidence_store import sample
@@ -188,6 +189,27 @@ class CliTests(unittest.TestCase):
         db = store.connect(self.dir / "inventory.sqlite3")
         self.assertEqual(review.current_labels(db), {})
         db.close()
+
+    def write_profile_with_history(self):
+        history = self.dir / "watch-history.html"
+        history.write_text("<html><body>" + cell("v9", "UCother", "Other", "Jan 2, 2020, 12:00:00 AM IST") + "</body></html>",
+                           encoding="utf-8")
+        (self.dir / "profile.json").write_text(json.dumps({"watch_history_path": str(history)}))
+
+    def test_propose_with_watch_history_asks_for_a_second_opinion_then_unsubscribes_on_agreement(self):
+        self.write_profile_with_history()
+        code, out = self.run_cli("propose")
+        self.assertIn("needs second opinion", out)
+        self.assertIn("REVIEW", out)
+
+        db = store.connect(self.dir / "inventory.sqlite3")
+        s = store.latest_samples(db)[0]
+        store.put_second_opinion(db, "chanA", s.evidence_hash, "opus-x", {"apparent_value": 0.2}, s.expires_at)
+        db.close()
+        code, out = self.run_cli("propose")
+
+        self.assertIn("UNSUBSCRIBE", out)
+        self.assertIn("value low, second opinion (0.2)", out)
 
     def test_labels_import(self):
         path = self.dir / "l.json"

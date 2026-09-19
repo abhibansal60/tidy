@@ -8,7 +8,7 @@ from google.auth.exceptions import GoogleAuthError
 from oauthlib.oauth2 import OAuth2Error
 import requests
 
-from . import experiment, judge, mutate, pilot, profile, review, store
+from . import escalate, experiment, judge, mutate, pilot, profile, review, store
 from .proposal import Proposal
 from .youtube import APIError, YouTube, authorize, load_credentials, save_credentials, session_for
 
@@ -64,6 +64,9 @@ def main(argv=None):
     jev.add_argument("--interests", default=judge.DEFAULT_INTERESTS)
     jev.add_argument("--habits", default=None, help="Owner viewing habits; defaults to profile.json viewing_habits")
     jev.add_argument("--execute", action="store_true")
+    second = commands.add_parser("escalate", help="Second opinion on channels Jev flags as low quality: dry run by default")
+    second.add_argument("--model", default="claude-opus-5")
+    second.add_argument("--execute", action="store_true")
     commands.add_parser("propose", help="Offline: Markdown report of proposals from stored samples and judgments")
     commands.add_parser("gate", help="Offline: agreement with owner labels and calibration gate status")
     mark = commands.add_parser("label", help="Record an owner label")
@@ -102,6 +105,9 @@ def main(argv=None):
             output = store.import_legacy(db, args.csv, args.results)
         elif args.command == "report":
             output = store.report(db)
+        elif args.command == "escalate":
+            config = profile.load(args.data_dir / "profile.json")
+            output = escalate.run(db, config, escalate.ask, args.model) if args.execute else escalate.plan(db, config)
         elif args.command == "propose":
             proposals, judgments, samples = review.derive(db, profile.load(args.data_dir / "profile.json"))
             print(review.render_report(proposals, judgments, samples, review.current_labels(db)))

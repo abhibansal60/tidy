@@ -4,7 +4,7 @@ from datetime import datetime
 import json
 from pathlib import Path
 
-from . import judge, policy, store
+from . import judge, policy, store, watch_history
 
 VERDICTS = ("keep", "drop", "unsure")
 AGREES = {"KEEP": "keep", "WATCH": "keep", "UNSUBSCRIBE": "drop"}  # REVIEW and unsure are excluded
@@ -98,8 +98,16 @@ def derive(db, profile, now=None):
             samples.append(s)
             judgments.append(j)
     trials = {r[0] for r in db.execute("SELECT channel_id FROM trials")}
-    proposals = [policy.propose(j, s, profile, "trial" if j.channel_id in trials else "active")
-                 for j, s in zip(judgments, samples)]
+    history = Path(profile["watch_history_path"]) if profile["watch_history_path"] else None
+    if history and history.is_file():  # policy-2: revealed watching plus the two-opinion low-quality cascade
+        counts = watch_history.watch_counts(history, profile["watch_window_days"], now)
+        proposals = [policy.propose_watch(j, s, profile, counts.get(j.channel_id, 0),
+                                          store.get_second_opinion(db, j.channel_id, s.evidence_hash, now),
+                                          "trial" if j.channel_id in trials else "active")
+                     for j, s in zip(judgments, samples)]
+    else:
+        proposals = [policy.propose(j, s, profile, "trial" if j.channel_id in trials else "active")
+                     for j, s in zip(judgments, samples)]
     return proposals, judgments, samples
 
 

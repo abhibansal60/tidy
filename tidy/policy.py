@@ -51,3 +51,33 @@ def propose(judgment, sample, profile, status="active"):
     else:
         action = "WATCH"
     return Proposal(judgment.channel_id, action, signals, POLICY_VERSION, judgment.evidence_hash)
+
+
+POLICY_VERSION_WATCH = "policy-2"
+
+
+def propose_watch(judgment, sample, profile, watched, second=None, status="active"):
+    """Revealed watching plus a strict cascade: low quality needs Jev AND a second opinion below the threshold."""
+    days, low = profile["watch_window_days"], profile["low_quality_value"]
+    val = judgment.answers["apparent_value"]["score"]
+    signals = ["on trial"] if status == "trial" else []
+    if val < low:
+        signals.append(f"value low, Jev ({val:.1f})")
+        if second is None:
+            action = "REVIEW"
+            signals.append("needs second opinion")
+        elif second["apparent_value"] < low:
+            action = "UNSUBSCRIBE"
+            signals += [f"value low, second opinion ({second['apparent_value']:.1f})",
+                        f"watched {watched} times in {days} days"]  # shown so the owner can veto
+        else:
+            action = "REVIEW"
+            signals.append(f"second opinion disagrees ({second['apparent_value']:.1f})")
+        return Proposal(judgment.channel_id, action, signals, POLICY_VERSION_WATCH, judgment.evidence_hash)
+    if watched:
+        return Proposal(judgment.channel_id, "KEEP", signals + [f"watched {watched} times in {days} days"],
+                        POLICY_VERSION_WATCH, judgment.evidence_hash)
+    signals.append(f"unwatched in {days} days")
+    if val >= profile["thresholds"]["keep_min"]:
+        signals.append("quality high: watch it or drop it")
+    return Proposal(judgment.channel_id, "REVIEW", signals, POLICY_VERSION_WATCH, judgment.evidence_hash)
