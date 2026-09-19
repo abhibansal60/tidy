@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 
 from . import store
-from .youtube import APIError, UnknownOutcome
+from .youtube import APIError, DELETE_COST, UnknownOutcome
 
 
 def audit(db, event, subscription_id=None, detail=None):
@@ -48,6 +48,11 @@ def finish(db, row, status, detail):
         audit(db, status, row["subscription_id"], detail)
 
 
+def _already(results):
+    done = [title for title, outcome in results if outcome == "deleted"]
+    return f" Already deleted this run: {', '.join(done)}." if done else ""
+
+
 def unsubscribe(db, api, expected_email, execute):
     todo = pending(db)
     summary = {"dry_run": not execute,
@@ -60,6 +65,11 @@ def unsubscribe(db, api, expected_email, execute):
     # Recheck live state right before acting; approval is never enough on its own.
     live = {row["id"]: row for row in api.subscriptions()}
     live_channels = {row["channel_id"] for row in live.values()}
+    deletes = sum(1 for r in todo if r["subscription_id"] in live)
+    left = api.max_units - api.units
+    if deletes * DELETE_COST > left:  # fail before the first delete, never half-way through a batch
+        raise APIError(f"Local quota budget too small: {deletes} deletes need {deletes * DELETE_COST} units, "
+                       f"{left} left; nothing deleted. Rerun with a larger --max-units.")
     results = []
     for row in todo:
         if row["account_channel"] != identity["youtube_channel_id"]:
@@ -79,10 +89,10 @@ def unsubscribe(db, api, expected_email, execute):
             outcome = api.delete_subscription(row["subscription_id"])
         except UnknownOutcome as error:
             finish(db, row, "unknown", str(error))
-            raise  # stop; next run reconciles against the live list before any retry
+            raise UnknownOutcome(str(error) + _already(results)) from None  # next run reconciles before any retry
         except APIError as error:
             finish(db, row, "approved", str(error))
-            raise
+            raise APIError(str(error) + _already(results)) from None
         finish(db, row, "done", outcome)
         results.append((row["title"], outcome))
     summary["results"] = results

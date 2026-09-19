@@ -116,6 +116,26 @@ class MutationTests(unittest.TestCase):
             mutate.unsubscribe(self.db, api, "owner@example.com", True)
         session.delete.assert_not_called()
 
+    def test_batch_budget_is_checked_before_the_first_delete(self):
+        mutate.approve(self.db, ["a", "b"], "x")
+        api, session = api_with([item("a"), item("b")])
+        api.max_units = 60  # identity and list cost 3; one delete fits, two do not
+
+        with self.assertRaisesRegex(APIError, r"2 deletes need 100 units.*nothing deleted.*--max-units"):
+            mutate.unsubscribe(self.db, api, "owner@example.com", True)
+
+        session.delete.assert_not_called()
+        self.assertEqual((self.status("sub-a"), self.status("sub-b")), ("approved", "approved"))
+
+    def test_a_mid_run_failure_names_what_was_already_deleted(self):
+        mutate.approve(self.db, ["a", "b"], "x")
+        api, _ = api_with([item("a"), item("b")], delete=[Mock(status_code=204), Mock(status_code=403)])
+
+        with self.assertRaisesRegex(APIError, r"HTTP 403.*Already deleted this run: A"):
+            mutate.unsubscribe(self.db, api, "owner@example.com", True)
+
+        self.assertEqual((self.status("sub-a"), self.status("sub-b")), ("done", "approved"))
+
     def test_audit_trail_records_events(self):
         mutate.approve(self.db, ["a"], "x")
         api, _ = api_with([item("a")])

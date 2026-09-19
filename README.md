@@ -99,7 +99,8 @@ Mutation is a separate, deliberately narrow path:
 ```
 
 `approve` binds the owner's approval to the current account and subscription ID.
-`--execute` rechecks identity and the live subscription list, deletes one
+`--execute` (default `--max-units 500`, which fits 9 deletes at 50 units each; raise it for larger batches, and the whole batch is
+checked against the budget before the first delete) rechecks identity and the live subscription list, deletes one
 subscription at a time (50 quota units each), records an audit event, and never
 retries an ambiguous outcome: it marks it `unknown` and reconciles against the live
 list on the next run. A channel re-subscribed under a new ID is skipped and needs
