@@ -103,11 +103,12 @@ class WatchPolicyTests(unittest.TestCase):
 
 
 class SubscribeTests(unittest.TestCase):
-    def test_subscribe_needs_high_quality_and_repeat_watching(self):
+    def test_subscribe_needs_repeat_watching_and_a_quality_floor(self):
         for name, val, watched, expected in [("good and watched often", 2.5, 4, "SUBSCRIBE"),
-                                             ("watched but middling quality", 1.5, 6, None),
+                                             ("watched a lot, modest quality", 0.8, 9, "SUBSCRIBE"),
+                                             ("watched a lot, junk quality", 0.3, 20, None),
                                              ("good but watched too little", 3.0, 1, None),
-                                             ("exactly the minimums", 2.0, 3, "SUBSCRIBE")]:
+                                             ("exactly the minimums", 0.5, 3, "SUBSCRIBE")]:
             with self.subTest(name):
                 p = policy.propose_subscribe(judgment(val=val), watched, PROFILE)
                 self.assertEqual(p and p.action, expected)
@@ -115,5 +116,5 @@ class SubscribeTests(unittest.TestCase):
     def test_subscribe_signals_show_the_evidence_and_policy(self):
         p = policy.propose_subscribe(judgment(val=2.5, evidence_hash="abc"), 4, PROFILE)
 
-        self.assertEqual(p.signals, ["value high (2.5)", "watched 4 times in 42 days, not subscribed"])
+        self.assertEqual(p.signals, ["value 2.5", "watched 4 times in 42 days, not subscribed"])
         self.assertEqual((p.channel_id, p.evidence_hash, p.policy_version), ("chanA", "abc", "policy-2"))

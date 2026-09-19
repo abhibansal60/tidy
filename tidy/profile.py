@@ -15,6 +15,7 @@ DEFAULTS = {
     "caps": {"unsubscribe": 5, "subscribe": 3},
     "watch_window_days": 42,       # how far back "recently watched" looks in the Takeout history
     "low_quality_value": 0.5,      # Jev and a second opinion must both score value below this to unsubscribe
+    "discovery_min_value": 0.5,    # quality floor for candidates: junk stays out, taste is decided by watching
     "discovery_min_watches": 3,    # unsubscribed channels watched at least this often in the window become candidates
     "watch_history_path": "",      # Takeout watch-history.html; empty means no watch signal (policy-1)
     "trial_days": 30,

@@ -84,10 +84,10 @@ def propose_watch(judgment, sample, profile, watched, second=None, status="activ
 
 
 def propose_subscribe(judgment, watched, profile):
-    """A channel the owner is not subscribed to: SUBSCRIBE only when quality is high and watching repeats."""
+    """A channel the owner is not subscribed to: SUBSCRIBE when watching repeats and quality clears a low floor."""
     val = judgment.answers["apparent_value"]["score"]
-    if val < profile["thresholds"]["keep_min"] or watched < profile["discovery_min_watches"]:
+    if val < profile["discovery_min_value"] or watched < profile["discovery_min_watches"]:
         return None
     return Proposal(judgment.channel_id, "SUBSCRIBE",
-                    [f"value high ({val:.1f})", f"watched {watched} times in {profile['watch_window_days']} days, not subscribed"],
+                    [f"value {val:.1f}", f"watched {watched} times in {profile['watch_window_days']} days, not subscribed"],
                     POLICY_VERSION_WATCH, judgment.evidence_hash)

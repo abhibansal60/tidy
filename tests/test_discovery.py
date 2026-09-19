@@ -49,13 +49,13 @@ class DeriveCandidateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             html = Path(d) / "watch-history.html"
             html.write_text("<html>" + "".join(
-                cell(f"{c}{i}", c, c, "Sep 10, 2026, 9:00:00 AM IST") for c in ("UCnew", "UCmid", "UCsubbed") for i in range(4))
+                cell(f"{c}{i}", c, c, "Sep 10, 2026, 9:00:00 AM IST") for c in ("UCnew", "UCjunk", "UCsubbed") for i in range(4))
                 + "</html>", encoding="utf-8")
             config = {**profile.load(Path(d) / "none.json"), "watch_history_path": str(html), "schema_id": "titles-v1"}
             db = store.connect(Path(d) / "inventory.sqlite3")
             db.execute("INSERT INTO subscriptions VALUES ('s1', 'UCsubbed', 'Subbed', NULL, 1, ?)", (NOW.isoformat(),))
             key = interests_key(config["interests"], config["viewing_habits"])
-            for cid, value in [("UCnew", 2.6), ("UCmid", 1.2), ("UCsubbed", 2.6)]:
+            for cid, value in [("UCnew", 2.6), ("UCjunk", 0.2), ("UCsubbed", 2.6)]:
                 s = sample(channel=cid, evidence_hash="h" + cid, fetched=NOW)
                 store.save_samples(db, CollectResult([s], {}), 1, now=NOW)
                 j = judgment(val=value, evidence_hash="h" + cid)
