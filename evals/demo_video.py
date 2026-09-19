@@ -2,7 +2,7 @@
 
 Needs Pillow and imageio-ffmpeg (not project dependencies):
     python3 -m venv /tmp/vid && /tmp/vid/bin/pip install pillow imageio-ffmpeg
-    /tmp/vid/bin/python -m evals.demo_video --out demo.mp4
+    PYTHONPATH=.venv/lib/python3.14/site-packages /tmp/vid/bin/python -m evals.demo_video --out demo.mp4
 """
 
 import argparse
@@ -13,10 +13,17 @@ import subprocess
 
 from PIL import Image, ImageDraw, ImageFont
 
+from evals import list_price
+
 W, H, FPS, SPEED = 1280, 720, 30, 20  # the race runs at 20x real time
 BG, INK, DIM, JEV = (14, 17, 22), (230, 237, 243), (125, 133, 144), (61, 220, 151)
+NAMES = {"claude-fable-5-1": "Fable 5.1", "claude-opus-5": "Opus 5", "claude-sonnet-5": "Sonnet 5",
+         "claude-haiku-4-5-20251001": "Haiku 4.5", "gpt-6-astra": "Astra", "gpt-5.6-sol": "Sol",
+         "gpt-5.6-terra": "Terra", "gpt-5.6-luna": "Luna"}
+LANE_OF = {"claude-fable-5-1": "fable", "claude-opus-5": "opus", "claude-sonnet-5": "sonnet", "claude-haiku-4-5-20251001": "haiku",
+           "gpt-6-astra": "astra", "gpt-5.6-sol": "sol", "gpt-5.6-terra": "terra", "gpt-5.6-luna": "luna"}
 JEV_USD_PER_MTOK_INPUT = 0.042  # TypeSafe console: "Estimated at $0.042/MTok input. Free output."
-LANE = {"sonnet": (240, 200, 94), "jev": JEV, "opus": (240, 163, 94), "sol": (106, 168, 255), "haiku": (181, 140, 255)}
+LANE = {"fable": (240, 120, 120), "astra": (80, 200, 220), "terra": (120, 190, 255), "luna": (170, 210, 255), "sonnet": (240, 200, 94), "jev": JEV, "opus": (240, 163, 94), "sol": (106, 168, 255), "haiku": (181, 140, 255)}
 SANS, BOLD, MONO = ("/usr/share/fonts/opentype/inter/Inter-Regular.otf", "/usr/share/fonts/opentype/inter/Inter-Bold.otf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")
 _fonts = {}
@@ -37,11 +44,11 @@ def load(data_dir):
     seconds = lambda name: read(name)["wall_ms"] / 1000
     repeat = read("eval_repeat_haiku_low.json")
     jev_tokens = sum(s["input_tokens"] for s in read("experiment_2.json")["schemas"].values())
-    claude = lambda name: sum(c.get("cost_usd") or 0 for c in read(name)["channels"].values())
-    return {"cost": [("jev", "Jev", jev_tokens * JEV_USD_PER_MTOK_INPUT / 1e6),
-                     ("opus", "Opus 5", claude("eval_claude_claude-opus-5_default.json")),
-                     ("sonnet", "Sonnet 5", claude("eval_claude_claude-sonnet-5_default.json")),
-                     ("haiku", "Haiku 4.5", claude("eval_claude_claude-haiku-4-5-20251001_default.json"))],
+    estimates = [r for r in list_price.all_estimates(d, list_price.prompt_tokens(d)) if r["channels"] == 110]
+    listed = [(NAMES[r["model"]] if r["model"] in NAMES else None, r) for r in estimates if r["model"] in NAMES]
+    listed = sorted(((LANE_OF[r["model"]], name + (" (projected)" if "projected_from" in r else ""), r["usd"]) for name, r in listed),
+                    key=lambda row: -row[2])
+    return {"cost": [("jev", "Jev", jev_tokens * JEV_USD_PER_MTOK_INPUT / 1e6)] + listed,
             "jev_tokens": jev_tokens, "race": [("jev", "Jev", seconds("experiment_2.json")),
                      ("opus", "Opus 5 · Claude Code", seconds("eval_claude_claude-opus-5_default.json")),
                      ("sol", "Sol · Codex", seconds("eval_codex_gpt-5.6-sol_default.json")),
@@ -102,21 +109,26 @@ def race(d, t, data):
 
 def cost(d, t, data):
     text(d, (90, 70), "What the same 110 judgments cost", 34, INK, BOLD)
-    text(d, (90, 118), f"Jev: {data['jev_tokens']:,} input tokens at $0.042 per million, output free. Claude: billed cost via Claude Code.", 22, DIM)
-    lo, hi = math.log10(0.001), math.log10(20)
+    text(d, (90, 118), f"Jev: {data['jev_tokens']:,} input tokens at $0.042 per million, output free. Others: estimated at list API prices.", 22, DIM)
+    lo, hi = math.log10(0.001), math.log10(5)
     span = 900
     for i, (key, label, usd) in enumerate(data["cost"]):
-        y = 210 + i * 110
-        text(d, (90, y), label, 28, LANE[key], BOLD)
-        grow = ease((t - 0.5 * i) / 1.2)
+        step = min(110, 440 // len(data["cost"]))
+        y = 170 + i * step
+        text(d, (90, y), label, 24, LANE[key], BOLD)
+        grow = ease((t - 0.35 * i) / 1.2)
         width = int(span * (math.log10(usd) - lo) / (hi - lo) * grow)
-        d.rectangle((90, y + 44, 90 + span, y + 70), fill=(28, 33, 40))
-        d.rectangle((90, y + 44, 90 + width, y + 70), fill=LANE[key])
+        d.rectangle((90, y + 34, 90 + span, y + 56), fill=(28, 33, 40))
+        d.rectangle((90, y + 34, 90 + width, y + 56), fill=LANE[key])
         if grow >= 1:
-            text(d, (1190, y + 12), f"${usd:.3f}" if usd < 1 else f"${usd:.2f}", 34, LANE[key], BOLD, "ra")
+            text(d, (1190, y + 10), f"${usd:.3f}" if usd < 1 else f"${usd:.2f}", 30, LANE[key], BOLD, "ra")
     text(d, (1190, 130), "log scale", 18, DIM, SANS, "ra")
     jev = data["cost"][0][2]
-    text(d, (W // 2, 650), f"Jev costs {data['cost'][1][2] / jev:,.0f}x less than Opus 5, {data['cost'][2][2] / jev:,.0f}x less than Sonnet 5",
+    if any("projected" in label for _, label, _ in data["cost"]):
+        text(d, (90, 700), "Projected: no Fable run yet; assumes it writes as many output tokens as Opus 5.", 18, DIM)
+    cheapest = min(usd for _, _, usd in data["cost"][1:])
+    priciest = max(usd for _, _, usd in data["cost"][1:])
+    text(d, (W // 2, 660), f"Jev costs {cheapest / jev:,.0f}x to {priciest / jev:,.0f}x less than the frontier models",
          28, JEV, BOLD, "mm", ease((t - 3) / 0.8))
 
 

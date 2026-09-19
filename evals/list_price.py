@@ -17,6 +17,7 @@ PRICES = {  # USD per million tokens: (input, output)
     "claude-haiku-4-5-20251001": (1, 5), "haiku": (1, 5),
     "gpt-6-astra": (10, 50), "gpt-5.6-sol": (4, 20), "gpt-5.6-terra": (2, 12), "gpt-5.6-luna": (0.2, 1.2)}
 CHARS_PER_TOKEN = 3.5
+PROJECT = {"claude-fable-5-1": "claude-opus-5"}  # no run yet: assume the reference model's output length
 
 
 def estimate(path, prompt_tokens):
@@ -31,17 +32,39 @@ def estimate(path, prompt_tokens):
             "output_tokens": out, "usd": round((prompt_tokens * len(done) * price_in + out * price_out) / 1e6, 4)}
 
 
+def project(model, reference, prompt_tokens):
+    """Cost of `model` if it wrote as many output tokens as the already-run `reference` model."""
+    price_in, price_out = PRICES[model]
+    return {"model": model, "projected_from": reference["model"], "channels": reference["channels"],
+            "output_tokens": reference["output_tokens"],
+            "usd": round((prompt_tokens * reference["channels"] * price_in + reference["output_tokens"] * price_out) / 1e6, 4)}
+
+
+def all_estimates(data_dir, prompt_tokens):
+    rows = [row for path in sorted(Path(data_dir).glob("eval_*_*.json"))
+            if "repeat" not in path.name and (row := estimate(path, prompt_tokens))]
+    have = {r["model"] for r in rows}
+    for model, ref in PROJECT.items():
+        base = next((r for r in rows if r["model"] == ref), None)
+        if model not in have and base:
+            rows.append(project(model, base, prompt_tokens))
+    return rows
+
+
+def prompt_tokens(data_dir):
+    samples = eval_samples(store.connect(Path(data_dir) / "inventory.sqlite3"), data_dir)
+    chars = [len(prompt_for(judge._state(s, judge.DEFAULT_INTERESTS, False))) for s in samples]
+    return sum(chars) / len(chars) / CHARS_PER_TOKEN
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data-dir", type=Path, default=Path(".tidy"))
     args = ap.parse_args()
-    samples = eval_samples(store.connect(args.data_dir / "inventory.sqlite3"), args.data_dir)
-    chars = [len(prompt_for(judge._state(s, judge.DEFAULT_INTERESTS, False))) for s in samples]
-    per_channel = sum(chars) / len(chars) / CHARS_PER_TOKEN
-    print(f"prompt: ~{per_channel:.0f} tokens per channel ({len(samples)} channels)")
-    for path in sorted(args.data_dir.glob("eval_*_*.json")):
-        if "repeat" not in path.name and (row := estimate(path, per_channel)):
-            print(json.dumps(row))
+    per_channel = prompt_tokens(args.data_dir)
+    print(f"prompt: ~{per_channel:.0f} tokens per channel")
+    for row in all_estimates(args.data_dir, per_channel):
+        print(json.dumps(row))
 
 
 if __name__ == "__main__":
