@@ -116,6 +116,23 @@ Collects the latest 12 uploads per channel with the read-only token (about 3 quo
 units per channel), adds the channels named in `data/owner_labels.json` by title,
 and stores dated evidence samples that expire after 30 days. Nothing is sent to Jev yet.
 
+## Schema experiment
+
+```bash
+.venv/bin/python -m tidy judge --schemas titles-v1 titles-desc-v1             # dry run, offline
+.venv/bin/python -m tidy judge --schemas titles-v1 titles-desc-v1 --execute   # calls Jev
+```
+
+Judges the stored, unexpired evidence samples once per schema and prints JSON: for each
+channel and schema the raw answers (score and confidence, or Noul probability), tokens and
+latency; per-schema totals (tokens, summed and max latency, calls versus cache hits); and per
+channel the difference between schemas on each question, flagged at 0.5 or more on a 0-3 score
+or 0.3 or more on a Noul. The dry run prints the sample count, calls and a rough input token
+estimate (characters divided by 4) without touching the network or needing a key. `--execute`
+reads `TYPESAFE_API_KEY` from the environment, or from `.env` in the parent of the current
+directory. Repeat runs on unchanged evidence and the same `--interests` cost zero calls.
+Cached answers keep their original tokens and latency in the totals.
+
 ## Inventory behavior and quota
 
 - All YouTube requests are GET requests for channels or subscriptions.

@@ -8,7 +8,7 @@ from google.auth.exceptions import GoogleAuthError
 from oauthlib.oauth2 import OAuth2Error
 import requests
 
-from . import mutate, pilot, store
+from . import experiment, judge, mutate, pilot, store
 from .youtube import APIError, YouTube, authorize, load_credentials, save_credentials, session_for
 
 
@@ -49,6 +49,10 @@ def main(argv=None):
     collect.add_argument("--window", type=int, default=12, help="Latest uploads per channel")
     collect.add_argument("--max-units", type=int, default=100)
     collect.add_argument("--execute", action="store_true")
+    jev = commands.add_parser("judge", help="Schema experiment on stored samples: dry run by default; --execute calls Jev")
+    jev.add_argument("--schemas", nargs="+", required=True, choices=sorted(judge.SCHEMAS))
+    jev.add_argument("--interests", default=judge.DEFAULT_INTERESTS)
+    jev.add_argument("--execute", action="store_true")
     commands.add_parser("report", help="Show baseline/live counts and differences as JSON")
     approve = commands.add_parser("approve", help="Record owner approval to unsubscribe from active channels")
     approve.add_argument("channel_ids", nargs="+")
@@ -71,6 +75,12 @@ def main(argv=None):
         elif args.command == "collect" and not args.execute:
             output = {**pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None, args.window),
                       "executes": False}
+        elif args.command == "judge":
+            if not args.execute:
+                output = experiment.plan(db, args.schemas, args.interests)
+            else:
+                with experiment.typesafe_client() as client:
+                    output = experiment.run(db, client, args.schemas, args.interests)
         elif args.command == "unsubscribe" and not args.execute:
             output = mutate.unsubscribe(db, None, None, False)
         else:
