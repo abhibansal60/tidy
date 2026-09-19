@@ -22,6 +22,13 @@ NAMES = {"claude-fable-5-1": "Fable 5.1", "claude-opus-5": "Opus 5", "claude-son
          "gpt-5.6-terra": "Terra", "gpt-5.6-luna": "Luna"}
 LANE_OF = {"claude-fable-5-1": "fable", "claude-opus-5": "opus", "claude-sonnet-5": "sonnet", "claude-haiku-4-5-20251001": "haiku",
            "gpt-6-astra": "astra", "gpt-5.6-sol": "sol", "gpt-5.6-terra": "terra", "gpt-5.6-luna": "luna"}
+RUNS = [("opus", "Opus 5 · Claude Code", "eval_claude_claude-opus-5_default.json"),
+        ("sonnet", "Sonnet 5 · Claude Code", "eval_claude_claude-sonnet-5_default.json"),
+        ("haiku", "Haiku 4.5 · Claude Code", "eval_claude_claude-haiku-4-5-20251001_default.json"),
+        ("sol", "Sol · Codex", "eval_codex_gpt-5.6-sol_default.json"),
+        ("astra", "Astra · Codex", "eval_codex_gpt-6-astra_default.json"),
+        ("terra", "Terra · Codex", "eval_codex_gpt-5.6-terra_default.json"),
+        ("luna", "Luna · Codex", "eval_codex_gpt-5.6-luna_default.json")]
 JEV_USD_PER_MTOK_INPUT = 0.042  # TypeSafe console: "Estimated at $0.042/MTok input. Free output."
 LANE = {"fable": (240, 120, 120), "astra": (80, 200, 220), "terra": (120, 190, 255), "luna": (170, 210, 255), "sonnet": (240, 200, 94), "jev": JEV, "opus": (240, 163, 94), "sol": (106, 168, 255), "haiku": (181, 140, 255)}
 SANS, BOLD, MONO = ("/usr/share/fonts/opentype/inter/Inter-Regular.otf", "/usr/share/fonts/opentype/inter/Inter-Bold.otf",
@@ -42,18 +49,21 @@ def load(data_dir):
     d = Path(data_dir)
     read = lambda name: json.loads((d / name).read_text())
     seconds = lambda name: read(name)["wall_ms"] / 1000
-    repeat = read("eval_repeat_haiku_low.json")
     jev_tokens = sum(s["input_tokens"] for s in read("experiment_2.json")["schemas"].values())
     estimates = [r for r in list_price.all_estimates(d, list_price.prompt_tokens(d)) if r["channels"] == 110]
-    listed = [(NAMES[r["model"]] if r["model"] in NAMES else None, r) for r in estimates if r["model"] in NAMES]
-    listed = sorted(((LANE_OF[r["model"]], name + (" (projected)" if "projected_from" in r else ""), r["usd"]) for name, r in listed),
-                    key=lambda row: -row[2])
-    return {"cost": [("jev", "Jev", jev_tokens * JEV_USD_PER_MTOK_INPUT / 1e6)] + listed,
-            "jev_tokens": jev_tokens, "race": [("jev", "Jev", seconds("experiment_2.json")),
-                     ("opus", "Opus 5 · Claude Code", seconds("eval_claude_claude-opus-5_default.json")),
-                     ("sol", "Sol · Codex", seconds("eval_codex_gpt-5.6-sol_default.json")),
-                     ("haiku", "Haiku (low) · Claude Code", seconds("eval_claude_haiku_low.json"))],
-            "repeat": [(label, repeat["jev"][key]["mean_abs_diff"], repeat["claude_haiku_low"][key]["mean_abs_diff"])
+    listed = sorted(((LANE_OF[r["model"]], NAMES[r["model"]] + (" (projected)" if "projected_from" in r else ""), r["usd"])
+                     for r in estimates if r["model"] in NAMES), key=lambda row: -row[2])
+    race = [("jev", "Jev", seconds("experiment_2.json"))]
+    for key, label, name in RUNS:  # only runs that answered all 110 channels
+        if (d / name).is_file() and sum("answers" in c for c in read(name)["channels"].values()) == 110:
+            race.append((key, label, seconds(name)))
+    race.sort(key=lambda row: row[2])
+    sonnet = d / "eval_repeat_claude-sonnet-5_.json"
+    repeat = read(sonnet.name if sonnet.is_file() else "eval_repeat_haiku_low.json")
+    baseline = next(k for k in repeat if k.startswith("claude_"))
+    other = "Sonnet 5" if "sonnet" in baseline else "Haiku (low)"
+    return {"race": race, "jev_tokens": jev_tokens, "cost": [("jev", "Jev", jev_tokens * JEV_USD_PER_MTOK_INPUT / 1e6)] + listed,
+            "repeat": [(label, repeat["jev"][key]["mean_abs_diff"], repeat[baseline][key]["mean_abs_diff"], other)
                        for label, key in (("relevance", "relevance"), ("value", "apparent_value"),
                                           ("packaging risk", "packaging_risk"))]}
 
@@ -94,16 +104,17 @@ def race(d, t, data):
     text(d, (90, 70), "Same 110 channels. Same prompts. 6 calls in flight.", 34, INK, BOLD)
     text(d, (W - 90, 76), f"{int(real // 60):02d}:{int(real % 60):02d}", 40, INK, MONO, "ra")
     text(d, (W - 90, 124), f"{SPEED}x speed", 20, DIM, SANS, "ra")
+    text(d, (90, 116), "Others run through coding CLIs (Claude Code, Codex): per-call tool overhead is included.", 20, DIM)
     for i, (key, label, secs) in enumerate(data["race"]):
-        y = 190 + i * 115
-        text(d, (90, y), label, 26, LANE[key], BOLD)
-        d.rectangle((90, y + 44, 1190, y + 74), fill=(28, 33, 40))
-        d.rectangle((90, y + 44, 90 + int(1100 * min(real / secs, 1)), y + 74), fill=LANE[key])
+        y = 165 + i * min(115, 460 // len(data["race"]))
+        text(d, (90, y), label, 24, LANE[key], BOLD)
+        d.rectangle((90, y + 34, 1190, y + 58), fill=(28, 33, 40))
+        d.rectangle((90, y + 34, 90 + int(1100 * min(real / secs, 1)), y + 58), fill=LANE[key])
         if real >= secs:
-            text(d, (1190, y), f"{secs:.1f} s" if secs < 60 else f"{int(secs // 60)}m {int(secs % 60):02d}s", 30, LANE[key], BOLD, "ra")
+            text(d, (1190, y + 4), f"{secs:.1f} s" if secs < 60 else f"{int(secs // 60)}m {int(secs % 60):02d}s", 28, LANE[key], BOLD, "ra")
     slowest = max(s for *_, s in data["race"])
     if real >= slowest:
-        text(d, (W // 2, 660), f"Jev: {slowest / data['race'][0][2]:.0f}x faster than the slowest, {data['race'][1][2] / data['race'][0][2]:.0f}x faster than Opus 5",
+        text(d, (W // 2, 672), f"Jev: {data['race'][1][2] / data['race'][0][2]:.0f}x to {slowest / data['race'][0][2]:.0f}x faster, against coding CLIs",
              28, JEV, BOLD, "mm", ease((real - slowest) / 20))
 
 
@@ -135,11 +146,11 @@ def cost(d, t, data):
 def repeat(d, t, data):
     text(d, (90, 70), "Run it twice. How far does the score move?", 34, INK, BOLD)
     text(d, (90, 118), "Mean change per channel between two runs (30 channels). Shorter is steadier.", 22, DIM)
-    scale = max(h for _, _, h in data["repeat"])
-    for i, (label, jev, haiku) in enumerate(data["repeat"]):
+    scale = max(row[2] for row in data["repeat"])
+    for i, (label, jev, haiku, other) in enumerate(data["repeat"]):
         y = 210 + i * 140
         text(d, (90, y), label, 26, INK, BOLD)
-        for j, (name, value, color) in enumerate((("Jev", jev, JEV), ("Haiku (low)", haiku, LANE["haiku"]))):
+        for j, (name, value, color) in enumerate((("Jev", jev, JEV), (other, haiku, LANE["haiku"]))):
             yy = y + 42 + j * 36
             text(d, (90, yy), name, 20, DIM)
             grow = ease((t - 0.4 * i) / 1.2)
