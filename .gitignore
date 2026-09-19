@@ -24,3 +24,4 @@ __pycache__/
 /results_live.json
 /unsub_candidates_live.md
 .jev/
+.claude/
