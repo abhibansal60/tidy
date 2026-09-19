@@ -187,6 +187,19 @@ applies nothing. Repeating it adds nothing new.
 `python -m evals.claude_baseline --model haiku --effort low` answers the same questions through
 `claude -p`; `python -m evals.repeat` measures run-to-run change; `python -m evals.compare JEV.json CLAUDE.json...`
 prints speed, cost and agreement. Outputs stay under `.tidy/` (private).
+`python -m evals.codex_baseline --model gpt-6-astra --resume` does the same through Codex CLI (`--resume` re-asks only
+failed channels). Every runner uses the original 110 channels in `experiment_2.json`, so later-collected candidates never
+join an eval. `python -m evals.list_price` estimates what each run would cost at list API prices (sources in the file),
+and `python -m evals.demo_video` renders the demo MP4 from the stored results (needs Pillow and imageio-ffmpeg).
+Research notes: `docs/research/` (Fable vs Opus efficiency, public and X comparisons of Jev).
+
+## Discovery from watch history
+
+`tidy discover` (dry run by default) lists channels you watched at least `discovery_min_watches` times (default 3) in
+`watch_window_days` that you are not subscribed to, counted from Takeout, never searched. `--execute` collects their
+evidence with the read-only token (about 3 quota units each). After `tidy judge`, `tidy propose` gives a SUBSCRIBE
+proposal when Jev's value is at least `discovery_min_value` (default 0.5). Nothing subscribes on its own: the subscribe
+gate stays closed until the calibration gate opens.
 
 ## Policy with watch history and the low-quality cascade
 
