@@ -47,7 +47,7 @@ def connect(path):
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1, 2, 3):
+    if version not in (0, 1, 2, 3, 4):
         db.close()
         raise ValueError("Database schema is newer than this application.")
     if version == 0:
@@ -117,6 +117,18 @@ def connect(path):
                 channel_id TEXT NOT NULL, message TEXT NOT NULL
             );
             PRAGMA user_version=3;
+            COMMIT;
+        """)
+    if version < 4:
+        # Judgments about API-derived evidence expire with that evidence.
+        db.executescript("""
+            BEGIN;
+            CREATE TABLE judgments (
+                evidence_hash TEXT NOT NULL, schema_id TEXT NOT NULL, interests_key TEXT NOT NULL,
+                channel_id TEXT NOT NULL, judged_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+                payload TEXT NOT NULL, PRIMARY KEY (evidence_hash, schema_id, interests_key)
+            );
+            PRAGMA user_version=4;
             COMMIT;
         """)
     # API metadata is a refreshable cache, not a permanent historical archive.
@@ -225,7 +237,24 @@ def purge(db, now=None):
     """Delete evidence samples past their 30-day API retention; returns how many."""
     stamp = (now or datetime.now(timezone.utc)).isoformat()
     with db:
+        db.execute("DELETE FROM judgments WHERE expires_at <= ?", (stamp,))
         return db.execute("DELETE FROM evidence_samples WHERE expires_at <= ?", (stamp,)).rowcount
+
+
+def put_judgment(db, judgment, interests_key, expires_at):
+    from dataclasses import asdict
+    with db:
+        db.execute("INSERT OR REPLACE INTO judgments VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   (judgment.evidence_hash, judgment.schema_id, interests_key, judgment.channel_id,
+                    judgment.judged_at, expires_at, json.dumps(asdict(judgment))))
+
+
+def get_judgment(db, evidence_hash, schema_id, interests_key, now=None):
+    from .judge import Judgment  # judge imports nothing from here; kept lazy like latest_samples
+    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    row = db.execute("SELECT payload FROM judgments WHERE evidence_hash=? AND schema_id=? AND interests_key=? "
+                     "AND expires_at > ?", (evidence_hash, schema_id, interests_key, stamp)).fetchone()
+    return Judgment(**json.loads(row["payload"])) if row else None
 
 
 def last_run(db):
