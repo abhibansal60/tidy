@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
-from jev_manager import store
-from jev_manager.__main__ import sync
-from jev_manager.youtube import APIError, READ_SCOPE, SCOPES, YouTube, authorize, check_scopes
+from tidy import store
+from tidy.__main__ import sync
+from tidy.youtube import APIError, READ_SCOPE, SCOPES, YouTube, authorize, check_scopes
 
 
 IDENTITY = {"google_sub": "google-user", "email": "owner@example.com", "youtube_channel_id": "owner-channel"}
@@ -118,7 +118,7 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(session.get.call_count, 3)  # userinfo does not spend YouTube units
         self.assertEqual(self.active(), [])
 
-    @patch("jev_manager.youtube.time.sleep")
+    @patch("tidy.youtube.time.sleep")
     def test_retry_counts_units_and_uses_only_get(self, sleep):
         session = Mock()
         session.get.side_effect = [response({}, 503), response({"items": []})]
@@ -183,7 +183,7 @@ class InventoryTests(unittest.TestCase):
         store.private_json(path, {"refresh_token": "replacement"})
         self.assertEqual(json.loads(path.read_text())["refresh_token"], "replacement")
 
-    @patch("jev_manager.youtube.InstalledAppFlow")
+    @patch("tidy.youtube.InstalledAppFlow")
     def test_oauth_uses_loopback_pkce_and_read_only_scopes(self, flow_class):
         path = self.root / "client.json"
         config = {"installed": {"auth_uri": "https://accounts.google.com/o/oauth2/auth",

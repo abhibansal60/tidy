@@ -1,7 +1,7 @@
 # Credentials and private local state
 .env*
 !.env.example
-.jev/
+.tidy/
 data/
 secrets/
 client_secret*.json
@@ -23,3 +23,4 @@ __pycache__/
 *.py[cod]
 /results_live.json
 /unsub_candidates_live.md
+.jev/

@@ -30,8 +30,8 @@ def sync(db, api, expected_email):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="YouTube subscription inventory; unsubscribes only for owner-approved subscriptions.")
-    parser.add_argument("--data-dir", type=Path, default=Path(".jev"))
+    parser = argparse.ArgumentParser(description="Tidy: YouTube subscription manager; unsubscribes only for owner-approved subscriptions.")
+    parser.add_argument("--data-dir", type=Path, default=Path(".tidy"))
     commands = parser.add_subparsers(dest="command", required=True)
     legacy = commands.add_parser("import-legacy", help="Import local Claude artifacts without network calls")
     legacy.add_argument("--csv", type=Path, default=Path("yt/subscriptions.csv"))
@@ -50,6 +50,8 @@ def main(argv=None):
     unsub.add_argument("--execute", action="store_true")
     unsub.add_argument("--max-units", type=int, default=500)
     args = parser.parse_args(argv)
+    if args.data_dir == Path(".tidy"):
+        store.adopt_old_dir(args.data_dir, Path(".jev"))
     db = None
     try:
         db = store.connect(args.data_dir / "inventory.sqlite3")

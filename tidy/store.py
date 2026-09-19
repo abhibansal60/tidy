@@ -31,6 +31,13 @@ def private_json(path, value):
             os.unlink(temporary)
 
 
+def adopt_old_dir(new, old):
+    """One-time move of the pre-rename data directory; never overwrites an existing new one."""
+    new, old = Path(new), Path(old)
+    if old.is_dir() and not new.exists():
+        old.rename(new)
+
+
 def connect(path):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -1,5 +1,7 @@
 # Project decisions
 
+The application is named Tidy (package `tidy`, data under `.tidy/`). Jev is the model it uses. Names must never include YouTube, YT or variants (YouTube API branding rules).
+
 Read README.md for the current phase and runnable commands. HANDOFF.md, when
 present locally, is the historical Claude handoff; it contains private data and
 is not tracked. It does not override the decisions below.

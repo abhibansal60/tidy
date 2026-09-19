@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 import unittest
 from unittest.mock import Mock
 
-from jev_manager.collector import collect
-from jev_manager.youtube import YouTube
+from tidy.collector import collect
+from tidy.youtube import YouTube
 
 
 NOW = datetime(2026, 9, 20, tzinfo=timezone.utc)

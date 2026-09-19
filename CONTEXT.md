@@ -1,6 +1,6 @@
-# Jev subscription manager
+# Tidy
 
-Personal tool that keeps the owner's YouTube subscription feed full of exceptional content. Jev makes every quality judgment; deterministic code does everything else.
+Tidy is a personal tool that keeps the owner's YouTube subscription feed full of exceptional content. Jev makes every quality judgment; deterministic code does everything else.
 
 ## Language
 

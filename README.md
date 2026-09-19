@@ -1,4 +1,4 @@
-# Jev subscription health experiment
+# Tidy: YouTube subscription manager powered by Jev
 
 A personal attention-management experiment: learn what Jev's bounded judgments
 can tell us about a subscription feed, then calibrate them against the owner's
@@ -17,11 +17,11 @@ pinned environment:
 python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python -m unittest discover -s tests -v
-.venv/bin/python -m jev_manager --help
+.venv/bin/python -m tidy --help
 ```
 
 The application runs from the project directory. SQLite, OAuth credentials, and
-local configuration live under `.jev/` by default. `--data-dir` selects a separate
+local configuration live under `.tidy/` by default. `--data-dir` selects a separate
 account's state and must precede the command. The account is bound to both the
 verified Google subject/email and the authorized YouTube channel ID.
 
@@ -30,8 +30,8 @@ verified Google subject/email and the authorized YouTube channel ID.
 On the original machine:
 
 ```bash
-.venv/bin/python -m jev_manager import-legacy
-.venv/bin/python -m jev_manager report
+.venv/bin/python -m tidy import-legacy
+.venv/bin/python -m tidy report
 ```
 
 Other locations can be supplied with `--csv` and `--results`. This command makes
@@ -55,15 +55,15 @@ The original local artifacts have a private checksummed backup under
 4. Create an OAuth client with application type **Desktop app**. Download its
    JSON to `secrets/client_secret.json` inside this project, or pass another
    path using `auth --client-secrets /path/to/client.json`.
-5. Copy `config.example.json` to `.jev/config.json`, setting `expected_email`
+5. Copy `config.example.json` to `.tidy/config.json`, setting `expected_email`
    to the Google account you intend to manage. On the original machine this
    private configuration has already been prepared.
 6. Run authorization, select the intended personal YouTube identity, then sync:
 
 ```bash
-.venv/bin/python -m jev_manager auth
-.venv/bin/python -m jev_manager sync --max-units 100
-.venv/bin/python -m jev_manager report
+.venv/bin/python -m tidy auth
+.venv/bin/python -m tidy sync --max-units 100
+.venv/bin/python -m tidy report
 ```
 
 OAuth uses Google's library, a local loopback callback, PKCE, and state validation.
@@ -91,11 +91,11 @@ exposed historical key; future Jev calls will use the private `../.env` file.
 Mutation is a separate, deliberately narrow path:
 
 ```bash
-.venv/bin/python -m jev_manager approve CHANNEL_ID... --note "why / proposal version"
-.venv/bin/python -m jev_manager unsubscribe            # dry run, offline
-.venv/bin/python -m jev_manager auth --write           # one-time, separate token_write.json
-.venv/bin/python -m jev_manager unsubscribe --execute
-.venv/bin/python -m jev_manager sync
+.venv/bin/python -m tidy approve CHANNEL_ID... --note "why / proposal version"
+.venv/bin/python -m tidy unsubscribe            # dry run, offline
+.venv/bin/python -m tidy auth --write           # one-time, separate token_write.json
+.venv/bin/python -m tidy unsubscribe --execute
+.venv/bin/python -m tidy sync
 ```
 
 `approve` binds the owner's approval to the current account and subscription ID.

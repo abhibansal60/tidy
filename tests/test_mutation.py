@@ -7,9 +7,9 @@ from unittest.mock import Mock
 
 import requests
 
-from jev_manager import mutate, store
-from jev_manager.__main__ import main
-from jev_manager.youtube import APIError, UnknownOutcome, WRITE_SCOPES, YouTube, check_scopes
+from tidy import mutate, store
+from tidy.__main__ import main
+from tidy.youtube import APIError, UnknownOutcome, WRITE_SCOPES, YouTube, check_scopes
 from test_inventory import IDENTITY, item, response
 
 
