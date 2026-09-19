@@ -7,6 +7,7 @@ Needs Pillow and imageio-ffmpeg (not project dependencies):
 
 import argparse
 import json
+import math
 from pathlib import Path
 import subprocess
 
@@ -14,7 +15,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 W, H, FPS, SPEED = 1280, 720, 30, 20  # the race runs at 20x real time
 BG, INK, DIM, JEV = (14, 17, 22), (230, 237, 243), (125, 133, 144), (61, 220, 151)
-LANE = {"jev": JEV, "opus": (240, 163, 94), "sol": (106, 168, 255), "haiku": (181, 140, 255)}
+JEV_USD_PER_MTOK_INPUT = 0.042  # TypeSafe console: "Estimated at $0.042/MTok input. Free output."
+LANE = {"sonnet": (240, 200, 94), "jev": JEV, "opus": (240, 163, 94), "sol": (106, 168, 255), "haiku": (181, 140, 255)}
 SANS, BOLD, MONO = ("/usr/share/fonts/opentype/inter/Inter-Regular.otf", "/usr/share/fonts/opentype/inter/Inter-Bold.otf",
                     "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf")
 _fonts = {}
@@ -34,7 +36,13 @@ def load(data_dir):
     read = lambda name: json.loads((d / name).read_text())
     seconds = lambda name: read(name)["wall_ms"] / 1000
     repeat = read("eval_repeat_haiku_low.json")
-    return {"race": [("jev", "Jev", seconds("experiment_2.json")),
+    jev_tokens = sum(s["input_tokens"] for s in read("experiment_2.json")["schemas"].values())
+    claude = lambda name: sum(c.get("cost_usd") or 0 for c in read(name)["channels"].values())
+    return {"cost": [("jev", "Jev", jev_tokens * JEV_USD_PER_MTOK_INPUT / 1e6),
+                     ("opus", "Opus 5", claude("eval_claude_claude-opus-5_default.json")),
+                     ("sonnet", "Sonnet 5", claude("eval_claude_claude-sonnet-5_default.json")),
+                     ("haiku", "Haiku 4.5", claude("eval_claude_claude-haiku-4-5-20251001_default.json"))],
+            "jev_tokens": jev_tokens, "race": [("jev", "Jev", seconds("experiment_2.json")),
                      ("opus", "Opus 5 · Claude Code", seconds("eval_claude_claude-opus-5_default.json")),
                      ("sol", "Sol · Codex", seconds("eval_codex_gpt-5.6-sol_default.json")),
                      ("haiku", "Haiku (low) · Claude Code", seconds("eval_claude_haiku_low.json"))],
@@ -92,6 +100,26 @@ def race(d, t, data):
              28, JEV, BOLD, "mm", ease((real - slowest) / 20))
 
 
+def cost(d, t, data):
+    text(d, (90, 70), "What the same 110 judgments cost", 34, INK, BOLD)
+    text(d, (90, 118), f"Jev: {data['jev_tokens']:,} input tokens at $0.042 per million, output free. Claude: billed cost via Claude Code.", 22, DIM)
+    lo, hi = math.log10(0.001), math.log10(20)
+    span = 900
+    for i, (key, label, usd) in enumerate(data["cost"]):
+        y = 210 + i * 110
+        text(d, (90, y), label, 28, LANE[key], BOLD)
+        grow = ease((t - 0.5 * i) / 1.2)
+        width = int(span * (math.log10(usd) - lo) / (hi - lo) * grow)
+        d.rectangle((90, y + 44, 90 + span, y + 70), fill=(28, 33, 40))
+        d.rectangle((90, y + 44, 90 + width, y + 70), fill=LANE[key])
+        if grow >= 1:
+            text(d, (1190, y + 12), f"${usd:.3f}" if usd < 1 else f"${usd:.2f}", 34, LANE[key], BOLD, "ra")
+    text(d, (1190, 130), "log scale", 18, DIM, SANS, "ra")
+    jev = data["cost"][0][2]
+    text(d, (W // 2, 650), f"Jev costs {data['cost'][1][2] / jev:,.0f}x less than Opus 5, {data['cost'][2][2] / jev:,.0f}x less than Sonnet 5",
+         28, JEV, BOLD, "mm", ease((t - 3) / 0.8))
+
+
 def repeat(d, t, data):
     text(d, (90, 70), "Run it twice. How far does the score move?", 34, INK, BOLD)
     text(d, (90, 118), "Mean change per channel between two runs (30 channels). Shorter is steadier.", 22, DIM)
@@ -137,7 +165,7 @@ def guardrails(d, t, data):
     text(d, (W // 2, 640), "Tidy · built on Jev (TypeSafe System One)", 26, JEV, SANS, "mm", ease((t - 3) / 0.8))
 
 
-SCENES = [(title, 6.0), (terminal, 5.0), (race, 25.0), (repeat, 6.0), (finding, 7.0), (guardrails, 5.0)]
+SCENES = [(title, 6.0), (terminal, 5.0), (race, 25.0), (cost, 7.0), (repeat, 6.0), (finding, 7.0), (guardrails, 5.0)]
 FADE = 0.4
 
 
