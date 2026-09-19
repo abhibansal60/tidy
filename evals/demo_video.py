@@ -48,9 +48,11 @@ def text(d, xy, s, size, color=INK, path=SANS, anchor="la", alpha=1.0):
 
 
 def title(d, t, data):
-    text(d, (W // 2, 270), "110 YouTube subscriptions.", 64, INK, BOLD, "mm", ease(t / 0.8))
-    text(d, (W // 2, 360), "Same evidence. Same four questions. Different judges.", 34, DIM, SANS, "mm", ease((t - 0.9) / 0.8))
-    text(d, (W // 2, 470), "Tidy · a subscription manager where Jev makes every quality call", 26, JEV, SANS, "mm", ease((t - 1.8) / 0.8))
+    text(d, (W // 2, 210), "I follow 110 YouTube channels.", 60, INK, BOLD, "mm", ease(t / 0.8))
+    text(d, (W // 2, 300), "Which ones are worth keeping?", 60, INK, BOLD, "mm", ease((t - 0.9) / 0.8))
+    text(d, (W // 2, 410), "Each channel needs a judgment call. Who should make it,", 30, DIM, SANS, "mm", ease((t - 2.0) / 0.8))
+    text(d, (W // 2, 452), "and how fast, how cheap, how consistently?", 30, DIM, SANS, "mm", ease((t - 2.0) / 0.8))
+    text(d, (W // 2, 560), "Same evidence, same four questions: Jev vs frontier models", 28, JEV, BOLD, "mm", ease((t - 3.2) / 0.8))
 
 
 def terminal(d, t, data):
@@ -135,7 +137,7 @@ def guardrails(d, t, data):
     text(d, (W // 2, 640), "Tidy · built on Jev (TypeSafe System One)", 26, JEV, SANS, "mm", ease((t - 3) / 0.8))
 
 
-SCENES = [(title, 4.0), (terminal, 5.0), (race, 25.0), (repeat, 6.0), (finding, 7.0), (guardrails, 5.0)]
+SCENES = [(title, 6.0), (terminal, 5.0), (race, 25.0), (repeat, 6.0), (finding, 7.0), (guardrails, 5.0)]
 FADE = 0.4
 
 

@@ -11,9 +11,10 @@ Read `evals/CODEX_PROMPT.md` first; every constraint there still applies (no cha
 ## Do, in order
 1. **Resume support (TDD, small).** Add `--resume` to `evals/codex_baseline.py`: when `--out` (or the default file) exists, keep every channel that already has `answers` and ask only for the rest, then write the merged file with the same shape and the original channel order. Failing test with a fake `ask_fn` first (assert only the failed channels are re-asked). Run the full suite.
 2. **Finish Astra.** `python -m evals.codex_baseline --model gpt-6-astra --resume`. If quota runs out again, stop, keep the merged partial file, and report the counts and the error category only.
-3. **Low-effort passes** for both models (`--effort low`), if the CLI accepts an effort setting; name files by model and effort.
-4. **Repeatability** for each model: the first 30 channels sorted by channel ID, two runs, as `evals/repeat.py` does for Claude. Write `.tidy/eval_repeat_codex_<model>.json`.
-5. **Compare:** `python -m evals.compare .tidy/experiment_2.json <every .tidy/eval_*.json>` then `python -m evals.labeled_accuracy` with the same files. Paste both outputs.
+3. **Terra and Luna.** After Astra is complete, run `gpt-5.6-terra` and `gpt-5.6-luna` at default effort the same way (`--resume` applies). Do this before any low-effort pass; stop cleanly if quota runs low and report what finished.
+4. **Low-effort passes** for both models (`--effort low`), if the CLI accepts an effort setting; name files by model and effort.
+5. **Repeatability** for each model: the first 30 channels sorted by channel ID, two runs, as `evals/repeat.py` does for Claude. Write `.tidy/eval_repeat_codex_<model>.json`.
+6. **Compare:** `python -m evals.compare .tidy/experiment_2.json <every .tidy/eval_*.json>` then `python -m evals.labeled_accuracy` with the same files. Paste both outputs.
 
 ## Report (plain text, short)
 Per model: channels answered, error categories, wall time, per-call median and p95, tokens, cost or why null, rank agreement with Jev per dimension, repeatability, labeled-accuracy AUCs with intervals. List anything not run and why.
