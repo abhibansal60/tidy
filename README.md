@@ -133,6 +133,25 @@ reads `TYPESAFE_API_KEY` from the environment, or from `.env` in the parent of t
 directory. Repeat runs on unchanged evidence and the same `--interests` cost zero calls.
 Cached answers keep their original tokens and latency in the totals.
 
+## Proposals, review and labels
+
+All of these run offline against the local database.
+
+- `profile.json` in the data directory holds your taste: interests, schema id,
+  policy thresholds, caps, trial days and the calibration gate. Missing keys use
+  defaults; unknown keys or bad types are rejected.
+- `python -m tidy propose` turns stored evidence samples and cached judgments
+  into proposals (KEEP, WATCH, REVIEW, UNSUBSCRIBE) and prints a Markdown report
+  with signals, dimension values, evidence coverage and links. Policy is
+  deterministic and versioned; changing `profile.json` or the policy costs no
+  Jev calls. Channels without a cached judgment are left out.
+- `python -m tidy label CHANNEL_ID keep|drop|unsure [--note ...]` records an owner
+  label; `python -m tidy labels import PATH` reads the private
+  `{"keep": [...], "sloppy": [...]}` file and matches titles to subscriptions.
+- `python -m tidy gate` prints agreement between proposals and your labels
+  (REVIEW and unsure labels are excluded) and whether the calibration gate is
+  open: at least 30 labels and 85% agreement by default.
+
 ## Inventory behavior and quota
 
 - All YouTube requests are GET requests for channels or subscriptions.

@@ -8,7 +8,7 @@ from google.auth.exceptions import GoogleAuthError
 from oauthlib.oauth2 import OAuth2Error
 import requests
 
-from . import experiment, judge, mutate, pilot, store
+from . import experiment, judge, mutate, pilot, profile, review, store
 from .youtube import APIError, YouTube, authorize, load_credentials, save_credentials, session_for
 
 
@@ -53,6 +53,15 @@ def main(argv=None):
     jev.add_argument("--schemas", nargs="+", required=True, choices=sorted(judge.SCHEMAS))
     jev.add_argument("--interests", default=judge.DEFAULT_INTERESTS)
     jev.add_argument("--execute", action="store_true")
+    commands.add_parser("propose", help="Offline: Markdown report of proposals from stored samples and judgments")
+    commands.add_parser("gate", help="Offline: agreement with owner labels and calibration gate status")
+    mark = commands.add_parser("label", help="Record an owner label")
+    mark.add_argument("channel_id")
+    mark.add_argument("verdict", choices=review.VERDICTS)
+    mark.add_argument("--note", default="")
+    bulk = commands.add_parser("labels", help="Import owner labels from a {keep, sloppy} title file")
+    bulk.add_argument("action", choices=["import"])
+    bulk.add_argument("path", type=Path)
     commands.add_parser("report", help="Show baseline/live counts and differences as JSON")
     approve = commands.add_parser("approve", help="Record owner approval to unsubscribe from active channels")
     approve.add_argument("channel_ids", nargs="+")
@@ -70,6 +79,19 @@ def main(argv=None):
             output = store.import_legacy(db, args.csv, args.results)
         elif args.command == "report":
             output = store.report(db)
+        elif args.command == "propose":
+            proposals, judgments, samples = review.derive(db, profile.load(args.data_dir / "profile.json"))
+            print(review.render_report(proposals, judgments, samples, review.current_labels(db)))
+            return 0
+        elif args.command == "gate":
+            config = profile.load(args.data_dir / "profile.json")
+            stats = review.agreement(db, review.derive(db, config)[0])
+            output = {**stats, "gate": review.gate_status(stats, config)}
+        elif args.command == "label":
+            review.label(db, args.channel_id, args.verdict, args.note)
+            output = {"labeled": args.channel_id, "verdict": args.verdict}
+        elif args.command == "labels":
+            output = review.import_label_file(db, args.path)
         elif args.command == "approve":
             output = mutate.approve(db, args.channel_ids, args.note)
         elif args.command == "collect" and not args.execute:
