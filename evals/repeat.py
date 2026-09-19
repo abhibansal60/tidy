@@ -10,7 +10,7 @@ from pathlib import Path
 import statistics
 
 from tidy import experiment, judge, store
-from evals.claude_baseline import ask
+from evals.claude_baseline import ask, eval_samples
 from evals.compare import DIMS
 
 
@@ -39,7 +39,7 @@ def main():
     ap.add_argument("--effort", default="low")
     ap.add_argument("--data-dir", type=Path, default=Path(".tidy"))
     args = ap.parse_args()
-    samples = sorted(store.latest_samples(store.connect(args.data_dir / "inventory.sqlite3")), key=lambda s: s.channel_id)[:args.n]
+    samples = sorted(eval_samples(store.connect(args.data_dir / "inventory.sqlite3"), args.data_dir), key=lambda s: s.channel_id)[:args.n]
     with experiment.typesafe_client() as client:
         jev = spread(jev_run(client, samples), jev_run(client, samples))
     claude = spread(claude_run(args.model, args.effort, samples), claude_run(args.model, args.effort, samples))

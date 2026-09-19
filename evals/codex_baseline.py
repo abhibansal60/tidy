@@ -9,7 +9,7 @@ import tempfile
 import time
 
 from tidy import judge, store
-from evals.claude_baseline import OUTPUT_SCHEMA, prompt_for
+from evals.claude_baseline import OUTPUT_SCHEMA, eval_samples, prompt_for
 
 
 def _text(item):
@@ -86,18 +86,20 @@ def ask(model, state, effort=None, run=subprocess.run, schema_path=None):
             Path(schema_path).unlink(missing_ok=True)
 
 
-def run_eval(model, effort, data_dir, limit=None, workers=6, ask_fn=ask):
+def run_eval(model, effort, data_dir, limit=None, workers=6, ask_fn=ask, existing=None):
     db = store.connect(Path(data_dir) / "inventory.sqlite3")
-    samples = store.latest_samples(db)
-    if limit is not None:
-        samples = samples[:limit]
+    samples = eval_samples(db, data_dir, limit)
     states = {sample.channel_id: judge._state(sample, judge.DEFAULT_INTERESTS, False) for sample in samples}
+    prior = (existing or {}).get("channels", {})
+    pending = [cid for cid in states if not isinstance(prior.get(cid), dict) or "answers" not in prior[cid]]
     started = time.monotonic()
     with ThreadPoolExecutor(workers) as pool:
-        replies = list(pool.map(lambda cid: ask_fn(model, states[cid], effort), states))
+        replies = list(pool.map(lambda cid: ask_fn(model, states[cid], effort), pending))
+    channels = {cid: prior[cid] for cid in states if cid in prior and cid not in pending}
+    channels.update(dict(zip(pending, replies)))
     return {"model": model, "effort": effort, "workers": workers,
             "wall_ms": round((time.monotonic() - started) * 1000),
-            "channels": dict(zip(states, replies))}
+            "channels": channels}
 
 
 def main(argv=None):
@@ -108,9 +110,13 @@ def main(argv=None):
     ap.add_argument("--workers", type=int, default=6)
     ap.add_argument("--out", type=Path)
     ap.add_argument("--data-dir", type=Path, default=Path(".tidy"))
+    ap.add_argument("--resume", action="store_true")
     args = ap.parse_args(argv)
-    report = run_eval(args.model, args.effort, args.data_dir, args.limit, args.workers)
     out = args.out or args.data_dir / f"eval_codex_{args.model}_{args.effort or 'default'}.json"
+    existing = None
+    if args.resume and out.exists():
+        existing = json.loads(out.read_text())
+    report = run_eval(args.model, args.effort, args.data_dir, args.limit, args.workers, existing=existing)
     out.write_text(json.dumps(report, indent=1))
     ok = sum("answers" in item for item in report["channels"].values())
     print(json.dumps({"model": args.model, "n": len(report["channels"]),

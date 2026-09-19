@@ -14,6 +14,12 @@ from tidy import judge, store
 from tidy.escalate import OUTPUT_SCHEMA, ask, prompt_for  # noqa: F401 (re-exported for other runners)
 
 
+def eval_samples(db, data_dir, limit=None):
+    """The 110 channels every system was judged on; later-collected candidates never join an eval."""
+    wanted = json.loads((Path(data_dir) / "experiment_2.json").read_text())["channels"]
+    return [s for s in store.latest_samples(db) if s.channel_id in wanted][:limit]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", required=True)
@@ -24,7 +30,7 @@ def main():
     ap.add_argument("--data-dir", type=Path, default=Path(".tidy"))
     args = ap.parse_args()
     db = store.connect(args.data_dir / "inventory.sqlite3")
-    samples = store.latest_samples(db)[:args.limit]
+    samples = eval_samples(db, args.data_dir, args.limit)
     states = {s.channel_id: judge._state(s, judge.DEFAULT_INTERESTS, False) for s in samples}
     started = time.monotonic()
     with ThreadPoolExecutor(args.workers) as pool:
