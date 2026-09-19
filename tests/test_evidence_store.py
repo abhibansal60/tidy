@@ -35,7 +35,7 @@ class EvidenceStoreTests(unittest.TestCase):
         store.save_samples(self.db, CollectResult([original], {}), request_units=3, now=NOW)
 
         self.assertEqual(store.latest_samples(self.db, now=NOW), [original])
-        self.assertEqual(self.db.execute("PRAGMA user_version").fetchone()[0], 4)
+        self.assertEqual(self.db.execute("PRAGMA user_version").fetchone()[0], 6)
 
     def test_new_sample_replaces_old_for_same_channel(self):
         store.save_samples(self.db, CollectResult([sample(title="Old", evidence_hash="h1")], {}), 3, now=NOW)

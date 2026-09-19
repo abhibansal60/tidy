@@ -20,6 +20,7 @@ WRITE_SCOPES = [WRITE_SCOPE, "openid", "https://www.googleapis.com/auth/userinfo
 API = "https://www.googleapis.com/youtube/v3/"
 USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
 DELETE_COST = 50  # documented quota cost of subscriptions.delete
+SUBSCRIBE_COST = 50  # documented quota cost of subscriptions.insert
 
 
 class APIError(RuntimeError):
@@ -139,6 +140,32 @@ class YouTube:
         if response.status_code >= 500 or response.status_code == 429:
             raise UnknownOutcome(f"API returned HTTP {response.status_code}; outcome unknown.")
         raise APIError(f"API returned HTTP {response.status_code}; unsubscribe not performed.")
+
+    def subscribe(self, channel_id):
+        """One attempt, never auto-retried. Returns (outcome, subscription_id or None)."""
+        if self.units + SUBSCRIBE_COST > self.max_units:
+            raise APIError("Local quota budget reached; no subscribe attempted.")
+        self.units += SUBSCRIBE_COST
+        body = {"snippet": {"resourceId": {"kind": "youtube#channel", "channelId": channel_id}}}
+        try:
+            response = self.session.post(API + "subscriptions", params={"part": "snippet"}, json=body,
+                                         timeout=30, allow_redirects=False)
+        except requests.RequestException:
+            raise UnknownOutcome("Network failure during subscribe; outcome unknown.") from None
+        if response.status_code == 200:
+            try:
+                return "subscribed", required_text(response.json().get("id"), "subscription ID")
+            except (ValueError, AttributeError):
+                raise UnknownOutcome("Subscribe reply unreadable; outcome unknown.") from None
+        if response.status_code >= 500 or response.status_code == 429:
+            raise UnknownOutcome(f"API returned HTTP {response.status_code}; outcome unknown.")
+        if response.status_code == 400:
+            try:
+                if "subscriptionDuplicate" in json.dumps(response.json()):
+                    return "exists", None
+            except ValueError:
+                pass
+        raise APIError(f"API returned HTTP {response.status_code}; subscribe not performed.")
 
     def identity(self, expected_email):
         user = self.get("userinfo")

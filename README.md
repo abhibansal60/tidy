@@ -105,6 +105,29 @@ retries an ambiguous outcome: it marks it `unknown` and reconciles against the l
 list on the next run. A channel re-subscribed under a new ID is skipped and needs
 fresh approval. The read-only token never gains write scope.
 
+## Gated automatic actions
+
+`act` turns proposals into subscribes and unsubscribes, only inside an owner-started
+run (ADR 0005). It is a dry run unless you pass `--execute`, and both gates are closed
+unless you open them:
+
+```bash
+.venv/bin/python -m tidy act --proposals proposals.json --gate-unsubscribe   # dry run, offline
+.venv/bin/python -m tidy act --proposals proposals.json --gate-unsubscribe --gate-subscribe --execute
+.venv/bin/python -m tidy resubscribe CHANNEL_ID... [--execute]              # undo an automatic unsubscribe
+```
+
+`proposals.json` is a list of Proposal dicts. Per run, at most 5 unsubscribes and 3
+subscribes (`--cap-unsubscribe`, `--cap-subscribe`). A proposal with fewer than two
+signals is never acted on. If the eligible unsubscribes exceed the larger of three
+times the cap or 20% of active subscriptions, the whole run aborts with no action.
+`--execute` uses `token_write.json`, rechecks identity and the live list, acts one
+at a time, and writes an audit event for each. Ambiguous outcomes are marked
+`unknown`, never retried, and settled against the live list next run. New
+subscriptions start a 30-day trial (`mutate.trials_due` lists the ended ones for
+review; nothing graduates or gets removed automatically). Each automatic unsubscribe
+records its subscription ID, channel and title so `resubscribe` can restore it.
+
 ## Evidence pilot
 
 ```bash
