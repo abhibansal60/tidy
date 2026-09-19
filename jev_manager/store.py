@@ -40,7 +40,7 @@ def connect(path):
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1):
+    if version not in (0, 1, 2):
         db.close()
         raise ValueError("Database schema is newer than this application.")
     if version == 0:
@@ -72,6 +72,24 @@ def connect(path):
                 last_seen TEXT NOT NULL
             );
             PRAGMA user_version=1;
+            COMMIT;
+        """)
+    if version < 2:
+        # Owner-approved unsubscribes: bound to account + subscription ID, with an audit trail.
+        db.executescript("""
+            BEGIN;
+            CREATE TABLE unsubscribes (
+                subscription_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL,
+                title TEXT NOT NULL, account_channel TEXT NOT NULL,
+                approved_at TEXT NOT NULL, note TEXT,
+                status TEXT NOT NULL CHECK (status IN ('approved','unknown','done')),
+                updated_at TEXT NOT NULL, detail TEXT
+            );
+            CREATE TABLE audit_events (
+                id INTEGER PRIMARY KEY, at TEXT NOT NULL, event TEXT NOT NULL,
+                subscription_id TEXT, detail TEXT
+            );
+            PRAGMA user_version=2;
             COMMIT;
         """)
     # API metadata is a refreshable cache, not a permanent historical archive.

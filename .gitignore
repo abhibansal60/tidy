@@ -21,3 +21,5 @@ token*.json
 .venv/
 __pycache__/
 *.py[cod]
+/results_live.json
+/unsub_candidates_live.md

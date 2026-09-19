@@ -14,21 +14,31 @@ from .store import private_json, required_text
 
 READ_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
 SCOPES = [READ_SCOPE, "openid", "https://www.googleapis.com/auth/userinfo.email"]
+# Write access lives in a separate token, only used by the approved-unsubscribe command.
+WRITE_SCOPE = "https://www.googleapis.com/auth/youtube"
+WRITE_SCOPES = [WRITE_SCOPE, "openid", "https://www.googleapis.com/auth/userinfo.email"]
 API = "https://www.googleapis.com/youtube/v3/"
 USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
+DELETE_COST = 50  # documented quota cost of subscriptions.delete
 
 
 class APIError(RuntimeError):
     pass
 
 
-def check_scopes(scopes):
+class UnknownOutcome(APIError):
+    """A mutation may or may not have happened; reconcile before retrying."""
+
+
+def check_scopes(scopes, write=False):
     scopes = set(scopes or [])
-    if READ_SCOPE not in scopes or scopes - set(SCOPES) - {"email"}:
-        raise APIError("Credential scopes must be read-only YouTube plus email/OpenID. Reauthorize.")
+    need, allowed = (WRITE_SCOPE, WRITE_SCOPES) if write else (READ_SCOPE, SCOPES)
+    if need not in scopes or scopes - set(allowed) - {"email"}:
+        kind = "YouTube write" if write else "read-only YouTube"
+        raise APIError(f"Credential scopes must be {kind} plus email/OpenID. Reauthorize.")
 
 
-def authorize(client_file, expected_email, open_browser=True):
+def authorize(client_file, expected_email, open_browser=True, write=False):
     config = json.loads(Path(client_file).read_text())
     if not isinstance(config, dict) or not isinstance(config.get("installed"), dict):
         raise ValueError("Expected a Google Desktop OAuth client JSON object.")
@@ -37,32 +47,33 @@ def authorize(client_file, expected_email, open_browser=True):
         "https://accounts.google.com/o/oauth2/auth", "https://accounts.google.com/o/oauth2/v2/auth"
     ) or installed.get("token_uri") != "https://oauth2.googleapis.com/token"):
         raise ValueError("Expected a Google Desktop OAuth client JSON with official Google endpoints.")
-    flow = InstalledAppFlow.from_client_config(config, SCOPES, autogenerate_code_verifier=True)
+    scopes = WRITE_SCOPES if write else SCOPES
+    flow = InstalledAppFlow.from_client_config(config, scopes, autogenerate_code_verifier=True)
     credentials = flow.run_local_server(
         host="127.0.0.1", port=0, open_browser=open_browser, timeout_seconds=180,
         prompt="consent", login_hint=expected_email, include_granted_scopes="false",
         success_message="Authorization received. Return to the terminal for account verification.",
     )
-    check_scopes(credentials.granted_scopes or credentials.scopes)
+    check_scopes(credentials.granted_scopes or credentials.scopes, write)
     if not credentials.refresh_token:
         raise APIError("No refresh token received. Revoke the old grant and authorize again.")
     return credentials
 
 
-def load_credentials(path):
+def load_credentials(path, write=False):
     data = json.loads(Path(path).read_text())
     if not isinstance(data, dict):
         raise ValueError("Invalid OAuth credential file; reauthorize.")
-    check_scopes(data.get("scopes"))
+    check_scopes(data.get("scopes"), write)
     credentials = Credentials.from_authorized_user_info(data)
     if not credentials.valid:
         credentials.refresh(Request())
-        save_credentials(path, credentials)
+        save_credentials(path, credentials, write)
     return credentials
 
 
-def save_credentials(path, credentials):
-    check_scopes(credentials.granted_scopes or credentials.scopes)
+def save_credentials(path, credentials, write=False):
+    check_scopes(credentials.granted_scopes or credentials.scopes, write)
     data = json.loads(credentials.to_json())
     data["scopes"] = list(credentials.granted_scopes or credentials.scopes)
     private_json(path, data)
@@ -110,6 +121,24 @@ class YouTube:
                 time.sleep(delay)
                 continue
             raise APIError(f"API returned HTTP {response.status_code}; check auth/quota in Google Console.")
+
+    def delete_subscription(self, subscription_id):
+        """The only mutation. One attempt, never auto-retried: an ambiguous outcome must be reconciled."""
+        if self.units + DELETE_COST > self.max_units:
+            raise APIError("Local quota budget reached; no unsubscribe attempted.")
+        self.units += DELETE_COST
+        try:
+            response = self.session.delete(API + "subscriptions", params={"id": subscription_id},
+                                           timeout=30, allow_redirects=False)
+        except requests.RequestException:
+            raise UnknownOutcome("Network failure during unsubscribe; outcome unknown.") from None
+        if response.status_code == 204:
+            return "deleted"
+        if response.status_code == 404:
+            return "absent"
+        if response.status_code >= 500 or response.status_code == 429:
+            raise UnknownOutcome(f"API returned HTTP {response.status_code}; outcome unknown.")
+        raise APIError(f"API returned HTTP {response.status_code}; unsubscribe not performed.")
 
     def identity(self, expected_email):
         user = self.get("userinfo")

@@ -18,7 +18,10 @@ is not tracked. It does not override the decisions below.
 - Jev supplies typed judgments. Code owns arithmetic, dates, persistence, policy,
   and side effects. Preserve raw answers and evidence provenance in future work.
 - Subscription changes require explicit recorded approval and a dry-run path.
-  No subscription mutations exist in this phase.
+  The only mutation is `unsubscribe` (dry-run by default), which acts solely on
+  subscriptions recorded by `approve`, uses a separate write-scope token, rechecks
+  the live list first, and stops on ambiguous outcomes. Owner approval for the
+  first batch was given 2026-09-19; later batches need fresh approval.
 - Account identity, OAuth files, subscription lists, databases, raw experiment
   outputs, and original handoff stay outside Git. Never publish without an
   explicit request. Preserve useful historical artifacts locally.

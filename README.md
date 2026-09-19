@@ -4,8 +4,9 @@ A personal attention-management experiment: learn what Jev's bounded judgments
 can tell us about a subscription feed, then calibrate them against the owner's
 decisions. Codex helps build the application; deterministic code runs it.
 
-**Current phase: read-only subscription inventory.** There is no unsubscribe,
-subscribe, scoring, or automatic review action in the new application yet.
+**Current phase: subscription inventory plus owner-approved unsubscribes.** There
+is no subscribe, scoring, or automatic review action in the new application yet.
+Unsubscribing is opt-in per subscription (see below) and dry-run by default.
 
 ## Run locally
 
@@ -84,6 +85,25 @@ publishing configuration before unattended scheduling. Official references:
 
 The inventory commands never read the TypeSafe API key. The owner has rotated the
 exposed historical key; future Jev calls will use the private `../.env` file.
+
+## Approved unsubscribes
+
+Mutation is a separate, deliberately narrow path:
+
+```bash
+.venv/bin/python -m jev_manager approve CHANNEL_ID... --note "why / proposal version"
+.venv/bin/python -m jev_manager unsubscribe            # dry run, offline
+.venv/bin/python -m jev_manager auth --write           # one-time, separate token_write.json
+.venv/bin/python -m jev_manager unsubscribe --execute
+.venv/bin/python -m jev_manager sync
+```
+
+`approve` binds the owner's approval to the current account and subscription ID.
+`--execute` rechecks identity and the live subscription list, deletes one
+subscription at a time (50 quota units each), records an audit event, and never
+retries an ambiguous outcome: it marks it `unknown` and reconciles against the live
+list on the next run. A channel re-subscribed under a new ID is skipped and needs
+fresh approval. The read-only token never gains write scope.
 
 ## Inventory behavior and quota
 

@@ -1,0 +1,88 @@
+"""Owner-approved unsubscribes: dry-run by default, bound to account + subscription ID, audited."""
+
+from . import store
+from .youtube import APIError, UnknownOutcome
+
+
+def audit(db, event, subscription_id=None, detail=None):
+    db.execute("INSERT INTO audit_events(at,event,subscription_id,detail) VALUES (?,?,?,?)",
+               (store.now(), event, subscription_id, detail))
+
+
+def approve(db, channel_ids, note):
+    """Record the owner's approval against the current live subscription, not a bare channel ID."""
+    account = db.execute("SELECT youtube_channel_id FROM account").fetchone()
+    if not account:
+        raise ValueError("No bound account. Run auth and sync first.")
+    rows = []
+    for channel_id in channel_ids:
+        row = db.execute("SELECT id, title FROM subscriptions WHERE channel_id=? AND active=1",
+                         (channel_id,)).fetchone()
+        if not row:
+            raise ValueError(f"{channel_id} is not an active subscription; sync first.")
+        rows.append((row["id"], channel_id, row["title"]))
+    with db:
+        for subscription_id, channel_id, title in rows:
+            added = db.execute("""INSERT OR IGNORE INTO unsubscribes
+                (subscription_id, channel_id, title, account_channel, approved_at, note, status, updated_at)
+                VALUES (?,?,?,?,?,?, 'approved', ?)""",
+                (subscription_id, channel_id, title, account[0], store.now(), note, store.now())).rowcount
+            if added:
+                audit(db, "approved", subscription_id, note)
+    return [{"subscription_id": s, "channel_id": c, "title": t} for s, c, t in rows]
+
+
+def pending(db):
+    return [dict(r) for r in db.execute(
+        "SELECT * FROM unsubscribes WHERE status IN ('approved','unknown') ORDER BY title")]
+
+
+def finish(db, row, status, detail):
+    with db:
+        db.execute("UPDATE unsubscribes SET status=?, updated_at=?, detail=? WHERE subscription_id=?",
+                   (status, store.now(), detail, row["subscription_id"]))
+        if status == "done":
+            db.execute("UPDATE subscriptions SET active=0 WHERE id=?", (row["subscription_id"],))
+        audit(db, status, row["subscription_id"], detail)
+
+
+def unsubscribe(db, api, expected_email, execute):
+    todo = pending(db)
+    summary = {"dry_run": not execute,
+               "pending": [{"subscription_id": r["subscription_id"], "title": r["title"],
+                            "status": r["status"]} for r in todo]}
+    if not execute or not todo:
+        return summary
+    identity = api.identity(expected_email)
+    store.bind_account(db, identity)  # refuses a different Google/YouTube identity
+    # Recheck live state right before acting; approval is never enough on its own.
+    live = {row["id"]: row for row in api.subscriptions()}
+    live_channels = {row["channel_id"] for row in live.values()}
+    results = []
+    for row in todo:
+        if row["account_channel"] != identity["youtube_channel_id"]:
+            raise ValueError("Approval belongs to a different account; refusing.")
+        current = live.get(row["subscription_id"])
+        if current is None:
+            if row["channel_id"] in live_channels:
+                finish(db, row, "approved", "skipped: channel re-subscribed under a new ID; re-approve")
+                results.append((row["title"], "skipped_resubscribed"))
+            else:  # gone already, or an earlier unknown attempt succeeded
+                finish(db, row, "done", "reconciled: subscription absent from live list")
+                results.append((row["title"], "already_absent"))
+            continue
+        if current["channel_id"] != row["channel_id"]:
+            raise APIError("Live subscription no longer matches approval; refusing.")
+        try:
+            outcome = api.delete_subscription(row["subscription_id"])
+        except UnknownOutcome as error:
+            finish(db, row, "unknown", str(error))
+            raise  # stop; next run reconciles against the live list before any retry
+        except APIError as error:
+            finish(db, row, "approved", str(error))
+            raise
+        finish(db, row, "done", outcome)
+        results.append((row["title"], outcome))
+    summary["results"] = results
+    summary["estimated_quota_units"] = api.units
+    return summary
