@@ -101,10 +101,19 @@ def derive(db, profile, now=None):
     history = Path(profile["watch_history_path"]) if profile["watch_history_path"] else None
     if history and history.is_file():  # policy-2: revealed watching plus the two-opinion low-quality cascade
         counts = watch_history.watch_counts(history, profile["watch_window_days"], now)
-        proposals = [policy.propose_watch(j, s, profile, counts.get(j.channel_id, 0),
-                                          store.get_second_opinion(db, j.channel_id, s.evidence_hash, now),
-                                          "trial" if j.channel_id in trials else "active")
-                     for j, s in zip(judgments, samples)]
+        active = {r[0] for r in db.execute("SELECT channel_id FROM subscriptions WHERE active=1")}
+        proposals, kept = [], []
+        for j, s in zip(judgments, samples):
+            if j.channel_id in active or j.channel_id in trials or not active:  # no inventory: treat all as subscribed
+                p = policy.propose_watch(j, s, profile, counts.get(j.channel_id, 0),
+                                         store.get_second_opinion(db, j.channel_id, s.evidence_hash, now),
+                                         "trial" if j.channel_id in trials else "active")
+            else:  # a candidate from discovery: subscribe or nothing
+                p = policy.propose_subscribe(j, counts.get(j.channel_id, 0), profile)
+            if p:
+                proposals.append(p)
+                kept.append((j, s))
+        judgments, samples = [j for j, _ in kept], [s for _, s in kept]
     else:
         proposals = [policy.propose(j, s, profile, "trial" if j.channel_id in trials else "active")
                      for j, s in zip(judgments, samples)]

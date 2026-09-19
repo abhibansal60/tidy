@@ -8,7 +8,7 @@ from google.auth.exceptions import GoogleAuthError
 from oauthlib.oauth2 import OAuth2Error
 import requests
 
-from . import escalate, experiment, judge, mutate, pilot, profile, review, store
+from . import discovery, escalate, experiment, judge, mutate, pilot, profile, review, store
 from .proposal import Proposal
 from .youtube import APIError, YouTube, authorize, load_credentials, save_credentials, session_for
 
@@ -59,6 +59,10 @@ def main(argv=None):
     collect.add_argument("--window", type=int, default=12, help="Latest uploads per channel")
     collect.add_argument("--max-units", type=int, default=100)
     collect.add_argument("--execute", action="store_true")
+    find = commands.add_parser("discover", help="Unsubscribed channels you watch often: dry run by default; --execute collects evidence")
+    find.add_argument("--limit", type=int, default=30)
+    find.add_argument("--max-units", type=int, default=100)
+    find.add_argument("--execute", action="store_true")
     jev = commands.add_parser("judge", help="Schema experiment on stored samples: dry run by default; --execute calls Jev")
     jev.add_argument("--schemas", nargs="+", required=True, choices=sorted(judge.SCHEMAS))
     jev.add_argument("--interests", default=judge.DEFAULT_INTERESTS)
@@ -126,6 +130,8 @@ def main(argv=None):
         elif args.command == "collect" and not args.execute:
             output = {**pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None, args.window),
                       "executes": False}
+        elif args.command == "discover" and not args.execute:
+            output = discovery.plan(db, profile.load(args.data_dir / "profile.json"), args.limit)
         elif args.command == "judge":
             habits = args.habits if args.habits is not None else profile.load(args.data_dir / "profile.json")["viewing_habits"]
             if not args.execute:
@@ -166,6 +172,9 @@ def main(argv=None):
                         chosen = pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None,
                                             args.window)["channels"]
                         output = pilot.run(db, YouTube(session, args.max_units), chosen, args.window)
+                    elif args.command == "discover":
+                        output = discovery.run(db, YouTube(session, args.max_units),
+                                               profile.load(args.data_dir / "profile.json"), args.limit)
                     elif args.command in ("act", "resubscribe"):
                         output = run_act(db, YouTube(session, args.max_units), email, args)
                     elif args.command == "unsubscribe":
