@@ -9,6 +9,7 @@ from oauthlib.oauth2 import OAuth2Error
 import requests
 
 from . import experiment, judge, mutate, pilot, profile, review, store
+from .proposal import Proposal
 from .youtube import APIError, YouTube, authorize, load_credentials, save_credentials, session_for
 
 
@@ -27,6 +28,15 @@ def sync(db, api, expected_email):
                        (store.now(), api.units, type(error).__name__, run_id))
         raise
     return {"subscriptions": len(rows), "estimated_quota_units": api.units, "run_id": run_id}
+
+
+def run_act(db, api, email, args):
+    if args.command == "resubscribe":
+        return mutate.resubscribe(db, api, args.channel_ids, args.execute, email)
+    proposals = [Proposal(**p) for p in json.loads(args.proposals.read_text())]
+    gates = {"UNSUBSCRIBE": args.gate_unsubscribe, "SUBSCRIBE": args.gate_subscribe}
+    caps = {"unsubscribe": args.cap_unsubscribe, "subscribe": args.cap_subscribe}
+    return mutate.act(db, api, proposals, gates, caps, email, args.execute)
 
 
 def main(argv=None):
@@ -69,6 +79,18 @@ def main(argv=None):
     unsub = commands.add_parser("unsubscribe", help="Dry-run by default; --execute deletes approved subscriptions")
     unsub.add_argument("--execute", action="store_true")
     unsub.add_argument("--max-units", type=int, default=500)
+    act = commands.add_parser("act", help="Gated automatic actions from proposals; dry run unless --execute")
+    act.add_argument("--proposals", type=Path, required=True, help="JSON list of Proposal dicts")
+    act.add_argument("--gate-unsubscribe", action="store_true", help="Open the UNSUBSCRIBE gate (default closed)")
+    act.add_argument("--gate-subscribe", action="store_true", help="Open the SUBSCRIBE gate (default closed)")
+    act.add_argument("--cap-unsubscribe", type=int, default=5)
+    act.add_argument("--cap-subscribe", type=int, default=3)
+    act.add_argument("--execute", action="store_true")
+    act.add_argument("--max-units", type=int, default=500)
+    resub = commands.add_parser("resubscribe", help="Restore automatically unsubscribed channels; dry run unless --execute")
+    resub.add_argument("channel_ids", nargs="+")
+    resub.add_argument("--execute", action="store_true")
+    resub.add_argument("--max-units", type=int, default=500)
     args = parser.parse_args(argv)
     if args.data_dir == Path(".tidy"):
         store.adopt_old_dir(args.data_dir, Path(".jev"))
@@ -105,6 +127,8 @@ def main(argv=None):
                     output = experiment.run(db, client, args.schemas, args.interests)
         elif args.command == "unsubscribe" and not args.execute:
             output = mutate.unsubscribe(db, None, None, False)
+        elif args.command in ("act", "resubscribe") and not args.execute:
+            output = run_act(db, None, None, args)
         else:
             config_file = args.data_dir / "config.json"
             if not config_file.is_file():
@@ -113,7 +137,7 @@ def main(argv=None):
             if not isinstance(config, dict):
                 raise ValueError("Private config.json must be an object.")
             email = store.required_text(config.get("expected_email"), "expected_email")
-            write = args.command == "unsubscribe" or getattr(args, "write", False)
+            write = args.command in ("unsubscribe", "act", "resubscribe") or getattr(args, "write", False)
             token_path = args.data_dir / ("token_write.json" if write else "token.json")
             if args.command == "auth":
                 if not args.client_secrets.is_file():
@@ -134,6 +158,8 @@ def main(argv=None):
                         chosen = pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None,
                                             args.window)["channels"]
                         output = pilot.run(db, YouTube(session, args.max_units), chosen, args.window)
+                    elif args.command in ("act", "resubscribe"):
+                        output = run_act(db, YouTube(session, args.max_units), email, args)
                     elif args.command == "unsubscribe":
                         output = mutate.unsubscribe(db, YouTube(session, args.max_units), email, True)
                     else:
