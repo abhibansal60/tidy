@@ -25,7 +25,8 @@ is not tracked. It does not override the decisions below.
   (ADR 0004). Do not add heuristic quality scores beside it.
 - Mutations (`unsubscribe`, later `subscribe`) are dry-run by default, use the
   separate write token, and recheck the live list first (ADR 0002). Manual
-  `approve` batches stay valid. Owner authorized gated autonomy on 2026-09-19
+  `approve` batches stay valid (owner approved batch 1, six channels, and batch 2, five channels, on
+  2026-09-19; later batches need fresh approval). Owner authorized gated autonomy on 2026-09-19
   (ADR 0005): automatic actions run only in an owner-started run, per action type
   only after the calibration gate holds, within caps, never on one dimension
   alone. Until a gate holds, propose only and collect owner labels.
