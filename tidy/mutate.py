@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 
 from . import store
-from .youtube import APIError, DELETE_COST, UnknownOutcome
+from .youtube import APIError, DELETE_COST, SUBSCRIBE_COST, UnknownOutcome
 
 
 def audit(db, event, subscription_id=None, detail=None):
@@ -51,6 +51,14 @@ def finish(db, row, status, detail):
 def _already(results):
     done = [title for title, outcome in results if outcome == "deleted"]
     return f" Already deleted this run: {', '.join(done)}." if done else ""
+
+
+def _require_budget(api, count, units):
+    """Fail before the first mutation, never half-way through a batch."""
+    left = api.max_units - api.units
+    if units > left:
+        raise APIError(f"Local quota budget too small: {count} mutations need {units} units, "
+                       f"{left} left; nothing changed. Rerun with a larger --max-units.")
 
 
 def unsubscribe(db, api, expected_email, execute):
@@ -168,6 +176,8 @@ def act(db, api, proposals, gates, caps, expected_email, execute=False, trial_da
     actions, aborted = _plan(proposals, gates, caps, subscribed, len(live))
     summary = {"dry_run": not execute, "aborted": aborted, "actions": actions}
     if execute:
+        planned = [a["action"] for a in actions if a["result"] == "would"]
+        _require_budget(api, len(planned), sum(DELETE_COST if k == "UNSUBSCRIBE" else SUBSCRIBE_COST for k in planned))
         titles = {r["channel_id"]: r["title"] for r in db.execute("SELECT channel_id, title FROM subscriptions")}
         for a in actions:
             if a["result"] != "would":
@@ -218,6 +228,8 @@ def resubscribe(db, api, channel_ids, execute=False, expected_email=None):
                                             "subscription_id": r["subscription_id"]} for r in chosen]}
     store.bind_account(db, api.identity(expected_email))
     live = {r["channel_id"] for r in api.subscriptions()}
+    todo = sum(r["channel_id"] not in live for r in chosen)
+    _require_budget(api, todo, todo * SUBSCRIBE_COST)
     results = []
     for row in chosen:
         channel = row["channel_id"]

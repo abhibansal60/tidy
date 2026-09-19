@@ -226,6 +226,28 @@ class ActTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             mutate.resubscribe(self.db, None, ["never-auto-unsubscribed"], False)
 
+    def test_act_checks_the_whole_batch_budget_before_the_first_mutation(self):
+        api, session = api_with([item("a"), item("b")])
+        api.max_units = 120  # identity and list cost 3; two mutations need 100, three need 150
+
+        with self.assertRaisesRegex(APIError, r"3 mutations need 150 units.*nothing changed.*--max-units"):
+            self.act([prop("a", "UNSUBSCRIBE"), prop("b", "UNSUBSCRIBE"), prop("z", "SUBSCRIBE")], api, execute=True)
+
+        session.delete.assert_not_called()
+        session.post.assert_not_called()
+        self.assertEqual(self.db.execute("SELECT count(*) FROM auto_actions").fetchone()[0], 0)
+
+    def test_resubscribe_checks_the_whole_batch_budget_before_the_first_subscribe(self):
+        api, _ = api_with([item("a"), item("b")])
+        self.act([prop("a", "UNSUBSCRIBE"), prop("b", "UNSUBSCRIBE")], api, execute=True)
+        api, session = api_with([item("c")])
+        api.max_units = 60
+
+        with self.assertRaisesRegex(APIError, r"2 mutations need 100 units.*nothing changed"):
+            mutate.resubscribe(self.db, api, ["a", "b"], True, "owner@example.com")
+
+        session.post.assert_not_called()
+
     def test_cli_dry_run_reads_proposals_file_offline(self):
         path = Path(self.temp.name) / "p.json"
         path.write_text(json.dumps([{"channel_id": "a", "action": "UNSUBSCRIBE", "signals": TWO}]))
