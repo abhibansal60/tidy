@@ -12,9 +12,12 @@ def _units_per_channel(window):
     return 1 + 2 * ceil(window / 50)
 
 
-def plan(db, channel_ids, labels_path, window):
+def plan(db, channel_ids, labels_path, window, all_active=False):
     """Offline: the channels a run would fetch (explicit ones, then owner-labeled by title) and its cost."""
     channels, unresolved = list(channel_ids), []
+    if all_active:
+        channels += [r["channel_id"] for r in db.execute("SELECT channel_id FROM subscriptions WHERE active=1 ORDER BY title")
+                     if r["channel_id"] not in channels]
     if labels_path:
         labels = json.loads(Path(labels_path).read_text())
         by_title = {r["title"].casefold(): r["channel_id"] for r in

@@ -35,6 +35,12 @@ class PilotTests(unittest.TestCase):
         self.assertEqual(plan["estimated_units"], 9)
         self.assertEqual(plan["window"], 12)
 
+    def test_plan_all_takes_every_active_subscription(self):
+        plan = pilot.plan(self.db, [], None, window=12, all_active=True)
+
+        self.assertEqual(plan["channels"], ["chanA", "chanB", "chanC"])
+        self.assertEqual(plan["estimated_units"], 9)
+
     def test_run_saves_samples_and_reports_coverage_and_quota(self):
         fake = FakeYouTube({"chanA": ["v1", "v2"], "chanB": []})
         api = YouTube(fake.session)

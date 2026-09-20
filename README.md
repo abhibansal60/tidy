@@ -4,9 +4,53 @@ A personal attention-management experiment: learn what Jev's bounded judgments
 can tell us about a subscription feed, then calibrate them against the owner's
 decisions. Codex helps build the application; deterministic code runs it.
 
-**Current phase: subscription inventory plus owner-approved unsubscribes.** There
-is no subscribe, scoring, or automatic review action in the new application yet.
-Unsubscribing is opt-in per subscription (see below) and dry-run by default.
+Jev (TypeSafe's System One model) makes every quality judgment; plain code owns thresholds, caps, budgets and
+every YouTube change, which goes through the official API (no browser automation). Nothing changes your
+subscriptions without your approval, and every command that could is a dry run until you add `--execute`.
+
+## Getting started
+
+You need Python 3.14, a Google Cloud project with the YouTube Data API v3 and a Desktop OAuth client, a TypeSafe API
+key, and (recommended) your Google Takeout watch history.
+
+1. **Install.** See "Run locally" below.
+2. **Configure.** Put the OAuth client JSON at `secrets/client_secret.json`, create `.tidy/config.json` with your
+   `expected_email` (copy `config.example.json`), and set `TYPESAFE_API_KEY` in the environment or `../.env`.
+   Details are in "Connect YouTube".
+3. **Authorize.** `python -m tidy auth` (read-only). Only when you want it to make changes: `python -m tidy auth --write`.
+4. **Add your taste.** Export your YouTube watch history from Google Takeout as HTML, save it under `data/`, and set
+   `watch_history_path` and a short `viewing_habits` description in `.tidy/profile.json`.
+5. **Run the monthly loop** (each step below is safe to rerun):
+
+```bash
+python -m tidy sync --max-units 100                       # fetch your live subscriptions
+python -m tidy collect --all --max-units 400 --execute   # latest 12 uploads per channel (about 3 units each)
+python -m tidy judge --schemas titles-v2 --execute        # Jev judges every channel in seconds
+python -m tidy escalate --execute                         # second opinion only for channels Jev flags as low quality
+python -m tidy discover --execute                         # optional: unsubscribed channels you watch often
+python -m tidy judge --schemas titles-v2 --execute        # judge the discovered ones too
+python -m tidy propose > proposals.md                     # read this: KEEP, REVIEW, UNSUBSCRIBE, SUBSCRIBE with the signals
+python -m tidy approve CHANNEL_ID... --note "why"         # you decide
+python -m tidy unsubscribe                                # dry run of approved unsubscribes
+python -m tidy unsubscribe --execute --max-units 500      # apply them
+```
+
+`--schemas` must match `schema_id` in `profile.json` (default `titles-desc-v1`; the calibrated profile here uses
+`titles-v2`). Use `python -m tidy COMMAND --help` for flags.
+
+### How often to run it
+
+About once a month, started by you. Three limits set the rhythm:
+
+- **Evidence expires after 30 days.** YouTube's API terms require refreshing or deleting API-derived data within 30
+  days, so a monthly run keeps the stored evidence and Jev's judgments valid (they are purged automatically after that).
+- **Your watch history is a Takeout export you make by hand,** and "recently watched" looks back six weeks by default.
+  Re-export it before each monthly run so a channel you started watching is not proposed for removal.
+- **Quota is small.** A full run for about 100 channels costs about 300 units for evidence and 50 per unsubscribe against
+  a 10,000-unit daily default, and Jev's judgments cost a fraction of a cent.
+
+Nothing runs on a schedule or without you: the automation is gated (per-run caps of 5 unsubscribes and 3 subscribes,
+the calibration gate, owner-started runs only). See `docs/adr/0005-gated-owner-started-autonomy.md`.
 
 ## Run locally
 

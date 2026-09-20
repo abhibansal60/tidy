@@ -54,6 +54,7 @@ def main(argv=None):
     live.add_argument("--max-units", type=int, default=100)
     collect = commands.add_parser("collect", help="Evidence pilot: dry run by default; --execute fetches and stores samples")
     collect.add_argument("--channels", nargs="*", default=[], help="Channel IDs to include")
+    collect.add_argument("--all", action="store_true", help="Every active subscription from the last sync")
     collect.add_argument("--labels", type=Path, default=Path("data/owner_labels.json"),
                          help="Owner labels file; its channels are added by title (skipped if missing)")
     collect.add_argument("--window", type=int, default=12, help="Latest uploads per channel")
@@ -128,7 +129,7 @@ def main(argv=None):
         elif args.command == "approve":
             output = mutate.approve(db, args.channel_ids, args.note)
         elif args.command == "collect" and not args.execute:
-            output = {**pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None, args.window),
+            output = {**pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None, args.window, args.all),
                       "executes": False}
         elif args.command == "discover" and not args.execute:
             output = discovery.plan(db, profile.load(args.data_dir / "profile.json"), args.limit)
@@ -170,7 +171,7 @@ def main(argv=None):
                 with session_for(credentials) as session:
                     if args.command == "collect":
                         chosen = pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None,
-                                            args.window)["channels"]
+                                            args.window, args.all)["channels"]
                         output = pilot.run(db, YouTube(session, args.max_units), chosen, args.window)
                     elif args.command == "discover":
                         output = discovery.run(db, YouTube(session, args.max_units),
