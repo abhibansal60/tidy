@@ -41,4 +41,6 @@ That's why I keep approval in my hands. In Tidy, Jev supplies judgments and code
 
 Tidy also found 30 channels I watch but don't follow and proposed 13. I declined all of them. Watching a channel often still wasn't enough reason for me to subscribe.
 
-DM me for the repo link.
+I run it about once a month, started by me: sync subscriptions, collect evidence, let Jev judge, read the proposals and approve. It never runs on its own. YouTube's API terms require refreshing evidence within 30 days, which sets the rhythm.
+
+DM me for the repo link and setup guide.
