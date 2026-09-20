@@ -10,7 +10,7 @@ Video: `.tidy/tidy_demo.mp4` (1280x720, about 60 s). GIF: `.tidy/tidy_demo.gif`.
 
 2/ Speed. Jev: 9.1 s for all 110. Through coding CLIs: Sonnet 5 and Opus 5 3m 08s, Terra 3m 35s, Luna 3m 37s, Sol 3m 48s, Astra about 4m 07s, Haiku 4.5 7m 19s. That is 21x to 48x. Caveat: CLIs add per-call overhead. Public direct-API tests find 3x to 6x.
 
-3/ Cost, at list API prices for the same run: Jev $0.004. Luna $0.03, Terra $0.31, Sonnet 5 $0.32, Sol $0.44, Haiku 4.5 $0.99, Opus 5 $1.03, Astra $1.11. That is 8x (Luna) to 250x (Astra) cheaper; Fable 5.1 projects to about $2 (not measured). (Estimates: 765-token prompt per channel, measured output tokens.)
+3/ Cost at list API prices for the same run: Jev $0.004. Luna $0.03, Terra $0.31, Sonnet 5 $0.32, Sol $0.44, Haiku 4.5 $0.99, Opus 5 $1.03, Astra $1.11. That is 8x to 250x cheaper. Fable 5.1 projects to ~$2 (not measured).
 
 4/ Consistency. Run it twice: Jev's scores moved 3x to 4x less than Sonnet 5's on relevance, value and packaging risk (4x to 12x less than Haiku at low effort). Nobody else has published this, so it is my measurement on 30 channels.
 
@@ -18,9 +18,9 @@ Video: `.tidy/tidy_demo.mp4` (1280x720, about 60 s). GIF: `.tidy/tidy_demo.gif`.
 
 6/ The honest part. I checked every judge against my own keep/drop labels (34 channels). Jev and all seven models scored 0.45 to 0.60, near a coin flip. My watch history scored 0.80. Quality is not taste. No model knew what I would actually keep.
 
-7/ So the design: Jev judges (seconds, cents). Code decides (thresholds, caps, budgets). I approve. 11 channels unsubscribed, each signed off. The same loop reads my watch history to find channels I watch but do not follow: it found 30 and proposed 13 to add. I took none; it proposes, I decide.
+7/ So the design: Jev judges (seconds, cents). Code decides (thresholds, caps, budgets). I approve. 11 channels unsubscribed, each signed off. A watch-history pass proposed 13 channels to add. I took none: it proposes, I decide.
 
-8/ Outside numbers agree on direction, not size: independent tests (Every, Pydantic, a customer-support benchmark) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models still ahead on open-ended tasks. Code and method: github.com/abhibansal60/tidy (private for now).
+8/ Outside numbers agree on direction, not size: independent tests (Every, Pydantic) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models ahead on open-ended tasks. Code and method: github.com/abhibansal60/tidy
 
 ## LinkedIn
 
@@ -43,6 +43,6 @@ Takeaway: use a decision model where you need many fast, repeatable calls, keep 
 - [x] Codex runs and Sonnet 5 repeatability are in (Astra's wall time is estimated from summed call time, because its run was resumed).
 - [ ] Confirm each number against `python -m evals.compare` and `python -m evals.list_price`.
 - [ ] Re-check OpenAI list prices on developers.openai.com/api/docs/pricing (the fetched page was summarised).
-- [ ] Decide whether Fable 5.1 shows as projected ($2.06) or measured.
+- [x] Fable 5.1 stays projected (~$2, not measured), decided by the owner.
 - [ ] Ask TypeSafe whether they want to review the claims and the repo link.
 - [ ] No channel names, IDs or screenshots of the owner's data.
