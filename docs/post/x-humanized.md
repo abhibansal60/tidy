@@ -20,7 +20,8 @@ I tested 8 models. None predicted what I'd keep much better than a coin flip. [v
 7/ In Tidy, I use Jev for judgments and code for thresholds, caps and budgets. I approve every change. No browser agent clicking around: one API call per change. So far, 11 unsubscribes, each signed off by me.
 
 8/ Tidy found 30 channels in my watch history that I don't follow and proposed 13. I declined all of them. I watch those ad hoc, and that's fine.
-DM me for the repo link.
+
+9/ How I run it: about once a month, started by me. Sync subscriptions, collect evidence, Jev judges, I read the proposals and approve. It never runs on its own. Evidence expires after 30 days, which sets the rhythm. DM me for the repo and setup guide.
 
 ## Long post (X Premium)
 
