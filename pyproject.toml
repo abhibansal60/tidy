@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tidy"
+version = "0.1.0"
+description = "Keeps a YouTube subscription list current: Jev judges, code sets the limits, you approve."
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.14"  # tested on 3.14 only
+dependencies = [
+    "google-auth>=2.58",
+    "google-auth-oauthlib>=1.4",
+    "requests>=2.34",
+    "typesafe-sdk>=0.7",
+]
+
+[project.scripts]
+tidy = "tidy.__main__:main"
+
+[tool.setuptools]
+packages = ["tidy"]
