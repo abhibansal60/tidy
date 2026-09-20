@@ -4,7 +4,15 @@ Numbers match `docs/post/draft.md` and the eval outputs. Rewrite the first two p
 
 ## Title
 
-I had 8 models judge my 110 YouTube subscriptions. None of them could predict what I'd actually keep
+Tried Jev on my 110 YouTube subscriptions: 9 seconds and under a cent, but it guessed what I'd keep no better than the frontier models
+
+Alternatives, all checked against our numbers:
+
+- Jev judged my 110 YouTube subscriptions in 9 seconds. Then I checked it against what I actually keep
+- I tested Jev (TypeSafe's decision model) against 7 frontier models on my own YouTube subscriptions. Faster and far cheaper, but none of them predicted what I'd keep
+- Jev vs 7 frontier models on a real task: pruning 110 YouTube subscriptions (speed, cost, and where they all failed)
+
+The first draws the most curiosity; the last is the most neutral. Avoid putting "3 minutes" or "300x" in a title, because the speed gap is measured through coding CLIs and readers will call it out.
 
 ## Body
 
