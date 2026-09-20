@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import html
 import re
 import unittest
 
@@ -76,7 +77,28 @@ class ReportHtmlTests(unittest.TestCase):
 
         self.assertIn("tidy approve chanA", default)
         self.assertNotIn("--data-dir", default)
-        self.assertIn("tidy --data-dir '/tmp/my data' approve chanA", custom)
+        self.assertIn("tidy --data-dir '/tmp/my data' approve chanA", html.unescape(custom))  # what the browser shows
+
+    def test_a_hostile_data_directory_cannot_inject_markup(self):
+        html = build(data_dir="/tmp/<b>mine</b>")
+
+        self.assertNotIn("<b>mine</b>", html)
+        self.assertIn("&lt;b&gt;mine&lt;/b&gt;", html)
+
+    def test_map_dots_name_their_channel_and_selecting_one_reveals_its_row(self):
+        html = build()
+
+        self.assertRegex(html, r"<title>Alpha Labs: ")
+        self.assertIn("r.open=true", html)  # the script opens the target row and clears filters first
+
+    def test_scores_state_their_scale_and_direction_and_the_batch_scope(self):
+        html = build()
+
+        self.assertIn("of 1", html)
+        self.assertIn("higher is riskier", html)
+        self.assertIn("every approved channel", html)
+        self.assertIn("apparent value", html)
+        self.assertNotIn("scores content quality", html)
 
     def test_gate_wording_never_promises_automatic_action(self):
         opened = build(gate={"open": True, "reasons": []})

@@ -31,7 +31,8 @@ h1{margin:0;font:600 32px/1.15 "Iowan Old Style","Palatino Linotype",Palatino,Ge
 .notice{margin:18px 0 0;padding:12px 16px;border-left:3px solid var(--review);background:var(--paper);max-width:70ch}
 .notice[hidden]{display:none}
 h2{margin:44px 0 6px;font:600 20px/1.2 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif}
-.map{width:100%;height:auto;display:block;margin-top:10px;background:var(--paper);border:1px solid var(--line)}
+.mapwrap{overflow-x:auto;margin-top:10px;border:1px solid var(--line);background:var(--paper)}
+.map{width:100%;min-width:640px;height:auto;display:block}
 .map text{fill:var(--muted);font:12px system-ui,sans-serif}.map .grid{stroke:var(--line);stroke-width:1}
 .map a circle{stroke:var(--paper);stroke-width:1.5}.map a:hover circle,.map a:focus circle{stroke:var(--ink);stroke-width:2}
 .k-UNSUBSCRIBE{background:var(--unsub)}.k-REVIEW{background:var(--review)}.k-KEEP{background:var(--keep)}.k-WATCH{background:var(--watch)}.k-SUBSCRIBE{background:var(--subscribe)}
@@ -68,6 +69,7 @@ let f='ALL';
 function apply(){const s=q.value.trim().toLowerCase();rows.forEach(r=>{r.hidden=(f!=='ALL'&&r.dataset.action!==f)||(s&&!r.dataset.title.includes(s))});}
 tabs.forEach(b=>b.addEventListener('click',()=>{f=b.dataset.f;tabs.forEach(t=>t.setAttribute('aria-pressed',t===b));apply();}));
 q.addEventListener('input',apply);
+document.querySelectorAll('.map a').forEach(a=>a.addEventListener('click',()=>{f='ALL';q.value='';tabs.forEach(t=>t.setAttribute('aria-pressed',t.dataset.f==='ALL'));apply();const r=document.getElementById(a.getAttribute('href').slice(1));if(r)r.open=true;}));
 const stale=document.getElementById('stale');if(stale&&Date.parse(stale.dataset.expires)<Date.now())stale.hidden=false;
 """
 
@@ -86,14 +88,14 @@ def _safe_url(url, allow_prefix=YOUTUBE):
 
 def render(proposals, judgments, samples, labels, gate, data_dir=".tidy"):
     by_j, by_s = {j.channel_id: j for j in judgments}, {s.channel_id: s for s in samples}
-    ordered = sorted(proposals, key=lambda p: (ORDER.index(p.action), p.channel_id))
+    ordered = sorted(proposals, key=lambda p: (ORDER.index(p.action), by_s[p.channel_id].title.lower(), p.channel_id))
     counts = {a: sum(p.action == a for p in ordered) for a in ORDER if any(p.action == a for p in ordered)}
     expires = min((s.expires_at for s in samples), default=None)
     tabs = f'<button type="button" data-f="ALL" aria-pressed="true">All {len(ordered)}</button>' + "".join(
         f'<button type="button" data-f="{a}" aria-pressed="false"><i class="key k-{a}"></i>{LABEL[a]} {n}</button>' for a, n in counts.items())
     if gate["open"]:
         gate_text = ("Calibration gate open for the current labels. Automatic actions still need an owner-started "
-                     "run of tidy act and stay within the per-run caps.")
+                     "run of tidy act and stay within the per-run caps. Agreement is measured on all current labels, not a held-out set.")
     else:
         gate_text = "Calibration gate closed: " + "; ".join(gate["reasons"]) + ". Nothing acts automatically."
     retention = (f'<p class="lede">Contains data from the YouTube API. Delete or refresh by {escape(expires[:10])}. '
@@ -111,7 +113,7 @@ def render(proposals, judgments, samples, labels, gate, data_dir=".tidy"):
 <p class="lede">{escape(gate_text)}</p>
 {retention}
 <h2>The feed on one page</h2>
-{_map(ordered, by_j)}
+{_map(ordered, by_j, by_s)}
 <h2>Channels</h2>
 <div class="tools">{tabs}<input id="q" type="search" placeholder="Search titles" aria-label="Search channel titles"></div>
 {rows}
@@ -119,7 +121,7 @@ def render(proposals, judgments, samples, labels, gate, data_dir=".tidy"):
 """
 
 
-def _map(ordered, by_j):
+def _map(ordered, by_j, by_s):
     use_watch = all("watch_likelihood" in by_j[p.channel_id].answers for p in ordered) and bool(ordered)
     xname = "watch_likelihood" if use_watch else "relevance"
     left, top, width, height = 56, 16, 780, 290
@@ -137,12 +139,12 @@ def _map(ordered, by_j):
             continue
         x, y = pos(a[xname]["score"], a["apparent_value"]["score"])
         dots += (f'<a href="#{escape(p.channel_id, quote=True)}"><circle class="dot-{p.action}" cx="{x:.1f}" cy="{y:.1f}" r="5">'
-                 f'<title>{escape(_title(p, a, xname))}</title></circle></a>')
+                 f'<title>{escape(by_s[p.channel_id].title)}: {escape(_title(p, a, xname))}</title></circle></a>')
     xlabel = "Watch fit (Jev's guess that you would watch it)" if use_watch else "Relevance to your interests"
-    return (f'<svg class="map" viewBox="0 0 860 350" role="img" aria-label="Each channel by value and {escape(xlabel)}">{grid}{dots}'
+    return (f'<div class="mapwrap"><svg class="map" viewBox="0 0 860 350" role="img" aria-label="Each channel by value and {escape(xlabel)}">{grid}{dots}'
             f'<text x="{left + width / 2}" y="344" text-anchor="middle">{escape(xlabel)}</text>'
-            f'<text x="14" y="{top + height / 2}" transform="rotate(-90 14 {top + height / 2})" text-anchor="middle">Value (0 to 3)</text></svg>'
-            f'<p class="hint">Each dot is a channel, colored by what Tidy proposes. Jev scores content quality and fit; it does not know what you keep, which is why the dots do not sort cleanly. Select a dot to jump to its row.</p>')
+            f'<text x="14" y="{top + height / 2}" transform="rotate(-90 14 {top + height / 2})" text-anchor="middle">Value (0 to 3)</text></svg></div>'
+            f'<p class="hint">Each dot is a channel, colored by what Tidy proposes. Jev estimates apparent value and fit from titles and descriptions; it does not know what you keep, which is why the dots do not sort cleanly. Select a dot to jump to its row.</p>')
 
 
 def _title(p, a, xname):
@@ -166,10 +168,10 @@ def _row(p, s, j, label, data_dir):
     dims = "".join(_dim(name_, a.get(name_)) for name_ in SCALE)
     videos = "".join(_video(v) for v in s.videos) or "<li>none collected</li>"
     signals = "".join(f"<li>{escape(x)}</li>" for x in p.signals) or "<li>none</li>"
-    t, sid = _tidy(data_dir), escape(cid, quote=True)
+    t, sid = escape(_tidy(data_dir)), escape(cid, quote=True)
     act = ""
     if p.action == "UNSUBSCRIBE":
-        act = (f'<p class="hint">Approving queues the change. Check the dry run before you apply it.</p>'
+        act = (f'<p class="hint">Approving queues the change. Unsubscribe applies every approved channel, not only this one, so read the dry run first.</p>'
                f"<code>{t} approve {sid} --note \"why\"</code><code>{t} unsubscribe</code>"
                f"<code>{t} unsubscribe --execute</code>")
     return f"""<details class="row {p.action}" id="{sid}" data-action="{p.action}" data-title="{escape(s.title.lower(), quote=True)}">
@@ -197,6 +199,10 @@ def _dim(name, answer):
         return f"<tr><th>{NAMES[name]}</th><td>not judged</td><td></td></tr>"
     value = answer["score"] if "score" in answer else answer["noul"]
     top = SCALE[name]
-    shown = f"{value:.1f} of {top}" if top == 3 else f"{value:.2f}"
+    shown = f"{value:.1f} of {top}" if top == 3 else f"{value:.2f} of 1"
     conf = f"confidence {answer['confidence']:.2f}" if "confidence" in answer else ""
+    if name == "packaging_risk":
+        conf = "higher is riskier"
+    elif name == "evidence_sufficiency":
+        conf = "higher is stronger evidence"
     return f"<tr><th>{NAMES[name]}</th><td>{shown}</td><td>{conf}</td></tr>"
