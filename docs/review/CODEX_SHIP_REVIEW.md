@@ -1,6 +1,6 @@
 # Codex task: pre-release review of Tidy (read-only unless a fix is small and safe)
 
-Repo the repository root, about to become public. Save quota: do not print files back, do not run evals or any `--execute`, do not read `.tidy/`, `data/`, `secrets/`, `.env`, `token*.json`. Read only `git ls-files` content. Run the tests once at the start and once at the end: `.venv/bin/python -m unittest discover -s tests -q`.
+Work in the repository root, about to become public. Save quota: do not print files back, do not run evals or any `--execute`, do not read `.tidy/`, `data/`, `secrets/`, `.env`, `token*.json`. Read only `git ls-files` content. Run the tests once at the start and once at the end: `.venv/bin/python -m unittest discover -s tests -q`.
 
 ## Review, in this order
 1. **Secrets and privacy.** Scan tracked files and full git history (`git log -p`) for keys, tokens, refresh tokens, emails other than `example.com`, real channel IDs or titles, absolute home paths, anything that identifies the owner beyond the public commit author. Report file and line, not the value.
