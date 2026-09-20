@@ -27,7 +27,7 @@ My watch history did better.
 
 9/9 I start each review myself: sync subscriptions, collect evidence, run Jev, then read and approve proposals. Tidy expires cached evidence after 30 days.
 
-DM me for the repo link and setup guide.
+Repo and setup guide: github.com/abhibansal60/tidy
 
 ## Long post (X Premium)
 
@@ -49,4 +49,4 @@ Tidy also found 30 channels I watch but don't follow and proposed 13. I declined
 
 I start each review myself: sync subscriptions, collect evidence, let Jev judge, then read and approve proposals. Tidy expires cached evidence after 30 days.
 
-DM me for the repo link and setup guide.
+Repo and setup guide: github.com/abhibansal60/tidy

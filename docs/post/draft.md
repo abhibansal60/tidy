@@ -20,7 +20,7 @@ Video: `.tidy/tidy_demo.mp4` (1280x720, about 70 s, first frame is the thumbnail
 
 7/ So the design: Jev judges (seconds, cents). Code decides (thresholds, caps, budgets). I approve. 11 channels unsubscribed, each signed off. A watch-history pass proposed 13 channels to add. I took none: it proposes, I decide.
 
-8/ Outside numbers agree on direction, not size: independent tests (Pydantic, Vercel) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models ahead on open-ended tasks. DM me for the repo link.
+8/ Outside numbers agree on direction, not size: independent tests (Pydantic, Vercel) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models ahead on open-ended tasks. Repo: github.com/abhibansal60/tidy
 
 ## LinkedIn
 
@@ -43,7 +43,7 @@ A pass through my watch history found 30 channels I watch but don't follow and p
 
 I start each review myself: sync subscriptions, collect evidence, let Jev judge, then read and approve proposals. Tidy expires cached evidence after 30 days.
 
-DM me for the repo link and setup guide.
+Repo and setup guide: github.com/abhibansal60/tidy
 
 ## Before posting (checklist)
 
