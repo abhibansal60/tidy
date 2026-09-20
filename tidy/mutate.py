@@ -110,10 +110,14 @@ def unsubscribe(db, api, expected_email, execute):
 
 def _plan(proposals, gates, caps, subscribed, active_count):
     """Decide per proposal: 'would' or 'skipped: reason'; returns (actions, abort reason)."""
-    actions = []
+    actions, seen = [], set()
     for p in proposals:
         if p.action not in ("UNSUBSCRIBE", "SUBSCRIBE"):
             continue
+        if p.channel_id in seen:
+            actions.append({"action": p.action, "channel_id": p.channel_id, "result": "skipped: duplicate"})
+            continue
+        seen.add(p.channel_id)
         if len(p.signals) < 2:
             reason = "skipped: fewer than two signals"
         elif not gates.get(p.action):

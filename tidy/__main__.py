@@ -30,12 +30,17 @@ def sync(db, api, expected_email):
     return {"subscriptions": len(rows), "estimated_quota_units": api.units, "run_id": run_id}
 
 
-def run_act(db, api, email, args):
+def run_act(db, api, email, args, config):
     if args.command == "resubscribe":
         return mutate.resubscribe(db, api, args.channel_ids, args.execute, email)
     proposals = [Proposal(**p) for p in json.loads(args.proposals.read_text())]
     gates = {"UNSUBSCRIBE": args.gate_unsubscribe, "SUBSCRIBE": args.gate_subscribe}
-    caps = {"unsubscribe": args.cap_unsubscribe, "subscribe": args.cap_subscribe}
+    if args.execute and any(gates.values()) and not args.override_gate:
+        status = review.gate_status(review.agreement(db, review.derive(db, config)[0]), config)
+        if not status["open"]:
+            raise ValueError("Calibration gate closed: " + "; ".join(status["reasons"]) + ". Pass --override-gate to act anyway.")
+    caps = {"unsubscribe": config["caps"]["unsubscribe"] if args.cap_unsubscribe is None else args.cap_unsubscribe,
+            "subscribe": config["caps"]["subscribe"] if args.cap_subscribe is None else args.cap_subscribe}
     return mutate.act(db, api, proposals, gates, caps, email, args.execute)
 
 
@@ -66,7 +71,7 @@ def main(argv=None):
     find.add_argument("--execute", action="store_true")
     jev = commands.add_parser("judge", help="Schema experiment on stored samples: dry run by default; --execute calls Jev")
     jev.add_argument("--schemas", nargs="+", required=True, choices=sorted(judge.SCHEMAS))
-    jev.add_argument("--interests", default=judge.DEFAULT_INTERESTS)
+    jev.add_argument("--interests", default=None, help="Defaults to profile.json interests")
     jev.add_argument("--habits", default=None, help="Owner viewing habits; defaults to profile.json viewing_habits")
     jev.add_argument("--execute", action="store_true")
     second = commands.add_parser("escalate", help="Second opinion on channels Jev flags as low quality: dry run by default")
@@ -82,6 +87,7 @@ def main(argv=None):
     bulk.add_argument("action", choices=["import", "sheet"])
     bulk.add_argument("path", type=Path)
     commands.add_parser("report", help="Show baseline/live counts and differences as JSON")
+    commands.add_parser("purge", help="Delete API-derived evidence and blank stored titles past the 30-day retention")
     approve = commands.add_parser("approve", help="Record owner approval to unsubscribe from active channels")
     approve.add_argument("channel_ids", nargs="+")
     approve.add_argument("--note", required=True, help="Why and on what evidence (proposal version)")
@@ -92,8 +98,9 @@ def main(argv=None):
     act.add_argument("--proposals", type=Path, required=True, help="JSON list of Proposal dicts")
     act.add_argument("--gate-unsubscribe", action="store_true", help="Open the UNSUBSCRIBE gate (default closed)")
     act.add_argument("--gate-subscribe", action="store_true", help="Open the SUBSCRIBE gate (default closed)")
-    act.add_argument("--cap-unsubscribe", type=int, default=5)
-    act.add_argument("--cap-subscribe", type=int, default=3)
+    act.add_argument("--cap-unsubscribe", type=int, default=None, help="Per-run cap (default: profile caps, 5)")
+    act.add_argument("--cap-subscribe", type=int, default=None, help="Per-run cap (default: profile caps, 3)")
+    act.add_argument("--override-gate", action="store_true", help="Act although the calibration gate is closed (owner override)")
     act.add_argument("--execute", action="store_true")
     act.add_argument("--max-units", type=int, default=500)
     resub = commands.add_parser("resubscribe", help="Restore automatically unsubscribed channels; dry run unless --execute")
@@ -110,6 +117,8 @@ def main(argv=None):
             output = store.import_legacy(db, args.csv, args.results)
         elif args.command == "report":
             output = store.report(db)
+        elif args.command == "purge":
+            output = {"purged_evidence_samples": store.purge(db)}
         elif args.command == "escalate":
             config = profile.load(args.data_dir / "profile.json")
             output = escalate.run(db, config, escalate.ask, args.model) if args.execute else escalate.plan(db, config)
@@ -134,16 +143,18 @@ def main(argv=None):
         elif args.command == "discover" and not args.execute:
             output = discovery.plan(db, profile.load(args.data_dir / "profile.json"), args.limit)
         elif args.command == "judge":
-            habits = args.habits if args.habits is not None else profile.load(args.data_dir / "profile.json")["viewing_habits"]
+            config = profile.load(args.data_dir / "profile.json")
+            habits = args.habits if args.habits is not None else config["viewing_habits"]
+            interests = args.interests if args.interests is not None else config["interests"]
             if not args.execute:
-                output = experiment.plan(db, args.schemas, args.interests, habits=habits)
+                output = experiment.plan(db, args.schemas, interests, habits=habits)
             else:
                 with experiment.typesafe_client() as client:
-                    output = experiment.run(db, client, args.schemas, args.interests, habits=habits)
+                    output = experiment.run(db, client, args.schemas, interests, habits=habits)
         elif args.command == "unsubscribe" and not args.execute:
             output = mutate.unsubscribe(db, None, None, False)
         elif args.command in ("act", "resubscribe") and not args.execute:
-            output = run_act(db, None, None, args)
+            output = run_act(db, None, None, args, profile.load(args.data_dir / "profile.json"))
         else:
             config_file = args.data_dir / "config.json"
             if not config_file.is_file():
@@ -177,7 +188,8 @@ def main(argv=None):
                         output = discovery.run(db, YouTube(session, args.max_units),
                                                profile.load(args.data_dir / "profile.json"), args.limit)
                     elif args.command in ("act", "resubscribe"):
-                        output = run_act(db, YouTube(session, args.max_units), email, args)
+                        output = run_act(db, YouTube(session, args.max_units), email, args,
+                                         profile.load(args.data_dir / "profile.json"))
                     elif args.command == "unsubscribe":
                         output = mutate.unsubscribe(db, YouTube(session, args.max_units), email, True)
                     else:

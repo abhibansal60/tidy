@@ -1,6 +1,6 @@
 # Codex task: finish the model evals (spend as little quota as possible)
 
-Repo `/home/abhi/code/jev`. `evals/codex_baseline.py` runs one model over the 110 stored channels through `codex exec` and writes `.tidy/eval_codex_<model>_<effort|default>.json`. Sol is complete. Astra has 42 of 110 answered (68 failed on quota). Terra and Luna are not run.
+Work in the repository root. `evals/codex_baseline.py` runs one model over the 110 stored channels through `codex exec` and writes `.tidy/eval_codex_<model>_<effort|default>.json`. Sol is complete. Astra has 42 of 110 answered (68 failed on quota). Terra and Luna are not run.
 
 ## Rules
 - Private data: never read or print `data/`, `.env`, `secrets/`, `.tidy/token*.json`; no channel names or IDs in output; do not touch `tidy/` or the database; no commits, no pushes; only these models: `gpt-6-astra`, `gpt-5.6-terra`, `gpt-5.6-luna`.

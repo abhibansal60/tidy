@@ -1,6 +1,6 @@
 # Codex task: run the Tidy channel-judging eval on two more models
 
-You are working in `/home/abhi/code/jev` (the Tidy app). Tidy judges YouTube channels with four narrow questions. Jev (TypeSafe) and Claude models have already been run on the same stored evidence. Your job is to run the identical eval on two OpenAI models through Codex CLI and write results in the same file format, so they can be added to an existing comparison.
+You are working in the repository root (the Tidy app). Tidy judges YouTube channels with four narrow questions. Jev (TypeSafe) and Claude models have already been run on the same stored evidence. Your job is to run the identical eval on two OpenAI models through Codex CLI and write results in the same file format, so they can be added to an existing comparison.
 
 ## Read first
 - `evals/claude_baseline.py`: the Claude runner. Reuse `prompt_for` and `OUTPUT_SCHEMA` from it so every model gets exactly the same prompt, rubric text and JSON schema. Do not reword the prompt.

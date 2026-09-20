@@ -14,9 +14,10 @@ is not tracked. It does not override the decisions below.
   are starting preferences, not categorical bans or mutation authorization.
 - Python and SQLite are approved. Reuse old work only when useful; there is no
   requirement to retain old architecture or scoring policy.
-- Current implementation scope is preservation and read-only subscription import.
-  API-fed scoring remains contingent on resolving YouTube's derived-data and
-  retention requirements. Later phases require an incremental review.
+- Current scope: subscription inventory, read-only evidence collection with a 30-day
+  retention limit, Jev judgments, review and labeling, owner-approved unsubscribes,
+  gated automatic actions (closed by default) and watch-history discovery. See
+  docs/adr/0005 and README.md.
 - Jev supplies typed judgments. Code owns arithmetic, dates, persistence, policy,
   and side effects. Preserve raw answers and evidence provenance in future work.
 - Vocabulary is in `CONTEXT.md`; reasons for the big decisions are in `docs/adr/`.

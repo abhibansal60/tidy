@@ -23,17 +23,21 @@ You need Python 3.14, a Google Cloud project with the YouTube Data API v3 and a 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/abhibansal60/tidy/main/install.sh | sh
-cd tidy
+cd tidy && . .venv/bin/activate
+mkdir -p .tidy secrets                      # then save your OAuth client JSON as secrets/client_secret.json
+echo '{"expected_email": "you@gmail.com"}' > .tidy/config.json
+echo 'TYPESAFE_API_KEY=your-key' > .env     # git-ignored
 ```
 
-Or with pipx: `pipx install git+https://github.com/abhibansal60/tidy`. Then:
+Or with pipx: `pipx install git+https://github.com/abhibansal60/tidy` (run it from an empty working folder, since Tidy keeps
+its data in `./.tidy`). Then:
 
 ```bash
 tidy auth                                   # read-only sign-in (opens a browser)
 tidy sync                                   # fetch your subscriptions
 tidy collect --all --max-units 400 --execute
 tidy judge --schemas titles-desc-v1 --execute
-tidy propose > proposals.md                 # read it: KEEP, REVIEW, UNSUBSCRIBE, SUBSCRIBE, with reasons
+tidy propose > .tidy/proposals.md           # read it: KEEP, REVIEW, UNSUBSCRIBE, SUBSCRIBE, with reasons
 ```
 
 To apply changes: `tidy auth --write`, `tidy approve CHANNEL_ID... --note "why"`, `tidy unsubscribe` (dry run), then
@@ -53,7 +57,7 @@ in chat, and never run a command with --execute until I say so.
 ## How often
 
 About once a month, started by you. YouTube's API terms require refreshing API-derived data within 30 days, and Tidy
-purges older evidence itself. Re-export your Takeout watch history before each run. A full run for 100 channels costs
+purges older evidence itself (`tidy purge` does it on demand). Re-export your Takeout watch history before each run. A full run for 100 channels costs
 about 300 quota units of the 10,000 you get per day.
 
 ## Safety
@@ -61,7 +65,7 @@ about 300 quota units of the 10,000 you get per day.
 - Private data (`.tidy/`, `data/`, `secrets/`, tokens, the database) is git-ignored and never leaves your machine, except
   channel evidence sent to Jev and the second-opinion model you choose.
 - Read-only and write tokens are separate. Write access is only requested when you ask for it.
-- Unsubscribes are dry-run by default, budget-checked before the first delete, logged, and reversible with `tidy resubscribe`.
+- Unsubscribes are dry-run by default, budget-checked before the first delete, logged, and automatic unsubscribes can be undone with `tidy resubscribe` (for a manual one, subscribe again on YouTube).
 - Automatic actions stay off until a calibration check against your own labels passes, and even then are capped per run.
   See [ADR 0005](docs/adr/0005-gated-owner-started-autonomy.md).
 - Not affiliated with YouTube, Google or TypeSafe. Use at your own risk.

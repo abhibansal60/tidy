@@ -20,7 +20,7 @@ fi
 cd "$DIR"
 python3 -m venv .venv
 .venv/bin/python -m pip install --quiet --upgrade pip
-.venv/bin/python -m pip install --quiet -e .
+.venv/bin/python -m pip install --quiet -c requirements.txt -e .
 .venv/bin/python -m unittest discover -s tests -q
 
 cat <<MSG

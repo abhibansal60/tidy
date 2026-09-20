@@ -21,17 +21,17 @@ def plan(db, schema_ids, interests, now=None, habits=""):
 
 
 def typesafe_client():
-    """Real client; key from TYPESAFE_API_KEY, else ../.env of the cwd. The key is never printed."""
+    """Real client; key from TYPESAFE_API_KEY, else .env in the cwd, else ../.env. The key is never printed."""
     from typesafe_sdk import TypeSafeClient
     key = os.environ.get("TYPESAFE_API_KEY")
-    env = Path.cwd().parent / ".env"
-    if not key and env.is_file():
-        for line in env.read_text().splitlines():
-            name, _, value = line.partition("=")
-            if name.strip() == "TYPESAFE_API_KEY":
-                key = value.strip().strip("\"'")
+    for env in (Path.cwd() / ".env", Path.cwd().parent / ".env"):
+        if not key and env.is_file():
+            for line in env.read_text().splitlines():
+                name, _, value = line.partition("=")
+                if name.strip() == "TYPESAFE_API_KEY":
+                    key = value.strip().strip("\"'")
     if not key:
-        raise ValueError("TYPESAFE_API_KEY not set (environment or ../.env).")
+        raise ValueError("TYPESAFE_API_KEY not set (environment, ./.env or ../.env).")
     return TypeSafeClient(api_key=key)
 
 

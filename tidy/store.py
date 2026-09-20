@@ -273,9 +273,12 @@ def latest_samples(db, channel_ids=None, now=None):
 
 
 def purge(db, now=None):
-    """Delete evidence samples past their 30-day API retention; returns how many."""
-    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    """Delete evidence samples past their 30-day API retention, and blank channel titles kept in audit rows; returns samples deleted."""
+    moment = now or datetime.now(timezone.utc)
+    stamp, cutoff = moment.isoformat(), (moment - timedelta(days=30)).isoformat()
     with db:
+        db.execute("UPDATE auto_actions SET title=NULL WHERE at <= ? AND title IS NOT NULL", (cutoff,))
+        db.execute("UPDATE unsubscribes SET title='(expired)' WHERE approved_at <= ? AND title<>'(expired)'", (cutoff,))
         db.execute("DELETE FROM judgments WHERE expires_at <= ?", (stamp,))
         db.execute("DELETE FROM second_opinions WHERE expires_at <= ?", (stamp,))
         return db.execute("DELETE FROM evidence_samples WHERE expires_at <= ?", (stamp,)).rowcount

@@ -305,8 +305,9 @@ YouTube's [developer policies](https://developers.google.com/youtube/terms/devel
 restrict derived data and require metadata refresh/deletion. The
 [additional metrics amendment](https://developers.google.com/youtube/terms/derived-metrics-policy)
 provides a conditional route for certain analytics uses. Eligibility for this
-personal experiment and retention of future evaluation payloads are unresolved;
-API-fed scoring is not implemented yet. Scraping is not a policy workaround.
+personal experiment is unresolved; evidence and judgments derived from the API
+are kept for at most 30 days and purged automatically (`tidy purge` runs it on
+demand). Scraping is not a policy workaround.
 
 Later increments: cached evidence pilot; Jev evaluation comparison; action report;
 manual review/calibration; approved mutations with safeguards; local dashboard;

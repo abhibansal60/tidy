@@ -1,6 +1,6 @@
 # Codex task: review and tighten the launch posts (no posting)
 
-Repo `/home/abhi/code/jev`. Review `docs/post/x-humanized.md` (X thread of 8 posts, plus a long version) and the LinkedIn text in `docs/post/draft.md`. Edit those two files only. Do not post anything, do not run evals, do not read `data/`, `.env`, `secrets/`, or `.tidy/token*`. Keep output short to save quota.
+Work in the repository root. Review `docs/post/x-humanized.md` (X thread of 8 posts, plus a long version) and the LinkedIn text in `docs/post/draft.md`. Edit those two files only. Do not post anything, do not run evals, do not read `data/`, `.env`, `secrets/`, or `.tidy/token*`. Keep output short to save quota.
 
 ## Goal
 Make both posts as likely to spread as an honest post can be, without a false or inflated claim. The story: 8 AI models judged 110 YouTube subscriptions; Jev was far faster and cheaper and steadier; none predicted what the owner keeps; the owner's watch history did better; Tidy lets Jev judge, code set limits, the owner approve.

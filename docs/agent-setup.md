@@ -7,7 +7,7 @@ and ask, do not guess.
 
 1. Never print, log, commit or paste secrets: OAuth client JSON, tokens, `TYPESAFE_API_KEY`, `.env`.
 2. Never run a command with `--execute` unless the person said to in this conversation. Dry runs are always fine.
-3. Never edit `.gitignore` to include `.tidy/`, `data/` or `secrets/`, and never commit those folders.
+3. Never edit `.gitignore` to include `.tidy/`, `data/`, `secrets/` or `.env`, and never commit them.
 4. Do not use browser automation on YouTube. All changes go through the API commands below.
 5. Report what each step did in one or two lines. If a command fails, show the error line and stop.
 
@@ -21,9 +21,9 @@ and ask, do not guess.
 3. **HUMAN: Google Cloud.** The person creates a project, enables YouTube Data API v3, configures the OAuth consent
    screen (add themselves as a test user), and creates an OAuth client of type Desktop app. They save the JSON as
    `secrets/client_secret.json`. You never open or print it.
-4. **HUMAN: TypeSafe key.** The person creates a key at console.typesafe.ai and puts `TYPESAFE_API_KEY=...` in `.env`
-   (or the environment). You never read it.
-5. **Configure.** Copy `config.example.json` to `.tidy/config.json` and set `expected_email` to the person's Google
+4. **HUMAN: TypeSafe key.** The person creates a key at console.typesafe.ai and puts `TYPESAFE_API_KEY=...` in `.env` in
+   the repository folder (or the environment; `../.env` also works). You never read it.
+5. **Configure.** `mkdir -p .tidy secrets`, copy `config.example.json` to `.tidy/config.json` and set `expected_email` to the person's Google
    email (ask them for it).
 6. **HUMAN: authorize.** Run `.venv/bin/tidy auth`. A browser opens for consent. It binds the database to that
    Google account.
@@ -34,7 +34,7 @@ and ask, do not guess.
    `.tidy/profile.json` (keys and defaults are in `tidy/profile.py`; see `docs/reference.md`).
 9. **Judge.** `tidy judge --schemas titles-desc-v1` (dry run), then with go-ahead `--execute`. If `profile.json` sets a
    different `schema_id`, use that.
-10. **Propose.** `tidy propose > proposals.md`. Summarize counts per action and the top signals. Do not approve
+10. **Propose.** `tidy propose > .tidy/proposals.md`. Summarize counts per action and the top signals. Do not approve
     anything for the person.
 11. **Optional: second opinion and discovery.** `tidy escalate` (dry run) and `tidy discover` (dry run) list what they
     would send or fetch.
@@ -43,5 +43,5 @@ and ask, do not guess.
 
 ## Done when
 
-`tidy report` shows the subscription count, `proposals.md` exists, `git status` shows no private files, and the person
-knows to rerun about once a month (steps 7, 9, 10 after a fresh Takeout export).
+`tidy report` shows the subscription count, `.tidy/proposals.md` exists, `git status` shows no private files, and the person
+knows to rerun about once a month: a fresh Takeout export, then `tidy sync` and `tidy collect --all` (step 7), judge (step 9) and propose (step 10).
