@@ -13,7 +13,7 @@ import subprocess
 
 from PIL import Image, ImageDraw, ImageFont
 
-from evals import list_price
+from evals import demo_thumbnail, list_price
 
 W, H, FPS, SPEED = 1280, 720, 30, 20  # the race runs at 20x real time
 BG, INK, DIM, JEV = (14, 17, 22), (230, 237, 243), (125, 133, 144), (61, 220, 151)
@@ -65,7 +65,7 @@ def load(data_dir):
     repeat = read(sonnet.name if sonnet.is_file() else "eval_repeat_haiku_low.json")
     baseline = next(k for k in repeat if k.startswith("claude_"))
     other = "Sonnet 5" if "sonnet" in baseline else "Haiku (low)"
-    return {"race": race, "jev_tokens": jev_tokens, "cost": [("jev", "Jev", jev_tokens * JEV_USD_PER_MTOK_INPUT / 1e6)] + listed,
+    return {"thumb": demo_thumbnail.draw(d), "race": race, "jev_tokens": jev_tokens, "cost": [("jev", "Jev", jev_tokens * JEV_USD_PER_MTOK_INPUT / 1e6)] + listed,
             "repeat": [(label, repeat["jev"][key]["mean_abs_diff"], repeat[baseline][key]["mean_abs_diff"], other)
                        for label, key in (("relevance", "relevance"), ("value", "apparent_value"),
                                           ("packaging risk", "packaging_risk"))]}
@@ -73,6 +73,10 @@ def load(data_dir):
 
 def text(d, xy, s, size, color=INK, path=SANS, anchor="la", alpha=1.0):
     d.text(xy, s, font=font(path, size), fill=tuple(int(b + (c - b) * alpha) for b, c in zip(BG, color)), anchor=anchor)
+
+
+def thumbnail(d, t, data):
+    """Placeholder: frame() pastes the pre-rendered thumbnail so a feed's poster frame is the thumbnail."""
 
 
 def title(d, t, data):
@@ -216,20 +220,21 @@ def guardrails(d, t, data):
     text(d, (W // 2, 640), "Tidy · built on Jev (TypeSafe System One)", 26, JEV, SANS, "mm", ease((t - 3) / 0.8))
 
 
-SCENES = [(title, 6.0), (terminal, 5.0), (race, 25.0), (cost, 7.0), (repeat, 6.0), (finding, 7.0), (loop, 8.0), (guardrails, 5.0)]
+SCENES = [(thumbnail, 1.5), (title, 6.0), (terminal, 5.0), (race, 25.0), (cost, 7.0), (repeat, 6.0), (finding, 7.0), (loop, 8.0), (guardrails, 5.0)]
 FADE = 0.4
 
 
 def frame(seconds, data):
     start = 0.0
-    for scene, length in SCENES:
+    for index, (scene, length) in enumerate(SCENES):
         if seconds < start + length:
             break
         start += length
     local = seconds - start
-    image = Image.new("RGB", (W, H), BG)
-    scene(ImageDraw.Draw(image), local, data)
-    fade = min(local / FADE, (length - local) / FADE, 1)
+    image = data["thumb"].copy() if scene is thumbnail else Image.new("RGB", (W, H), BG)
+    if scene is not thumbnail:
+        scene(ImageDraw.Draw(image), local, data)
+    fade = min(1 if index == 0 else local / FADE, (length - local) / (0.2 if index == 0 else FADE), 1)
     return image if fade >= 1 else Image.blend(Image.new("RGB", (W, H), BG), image, max(fade, 0))
 
 

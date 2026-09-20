@@ -2,7 +2,7 @@
 
 Status: DRAFT, numbers final as of 2026-09-20 04:00 IST (all runs complete). No channel names appear anywhere; keep it that way.
 
-Video: `.tidy/tidy_demo.mp4` (1280x720, about 60 s). GIF: `.tidy/tidy_demo.gif`.
+Video: `.tidy/tidy_demo.mp4` (1280x720, about 70 s, first frame is the thumbnail). GIF: `.tidy/tidy_demo.gif`.
 
 ## X thread
 
@@ -24,24 +24,24 @@ Video: `.tidy/tidy_demo.mp4` (1280x720, about 60 s). GIF: `.tidy/tidy_demo.gif`.
 
 ## LinkedIn
 
-Jev judged my 110 YouTube subscriptions in 9 seconds. Sonnet 5 took 3 minutes 8 seconds.
-Neither predicted what I'd keep much better than a coin flip.
+Jev judged my 110 YouTube subscriptions in 9 seconds. Sonnet 5 via CLI: 3 minutes 8 seconds.
+Both scored near chance on what I'd keep. My watch history did better.
 
 I tested 8 models: Jev, Opus 5, Sonnet 5, Haiku 4.5, Sol, Astra, Terra and Luna. I gave each the same four questions and prompts.
 
-Jev finished in 9.1 seconds. I timed the others through Claude Code or Codex, with 6 calls in flight. That gave Jev a 21 to 48 times speed advantage, including CLI overhead. Tests by Pydantic, Vercel and another developer found about 3 to 6 times against direct APIs, and frontier models still win some tasks.
+Jev finished in 9.1 seconds. I timed the others through Claude Code or Codex, with 6 calls in flight. That gave Jev a 21 to 48 times speed advantage, including CLI overhead. Pydantic and Vercel report about 3 to 6 times on direct APIs with different baselines. Frontier models still win some tasks.
 
 At list API prices, my run came to $0.004 for Jev and $0.03 (Luna) to $1.11 (Astra) for the others. Fable 5.1 would be about $2 by my projection. I didn't run it.
 
 On 30 channels over two runs, Jev's scores moved 3 to 4 times less than Sonnet 5's. That's one person's repeatability test. Its rank agreement with Opus 5 was 0.88 to 0.97 on relevance, value and packaging risk.
 
-Against my keep or drop labels on 66 channels, every model scored 0.43 to 0.52. On this measure, 0.5 is a coin flip. My watch history scored 0.69 (95% interval: 0.59 to 0.80). It predicted my choices better in this test, though imperfectly.
+Against my keep or drop labels on 66 channels, every model's composite ranking scored 0.43 to 0.52 AUC. AUC measures whether a keep ranks above a drop; 0.5 is chance. My watch history scored 0.69 AUC (95% interval: 0.59 to 0.80). It predicted my choices better in this test, though imperfectly.
 
-In Tidy, I use Jev for judgments and code for thresholds, caps and budgets, with one API call per change and no browser agent clicking around. I approve every change. So far, I've approved 11 unsubscribes.
+In Tidy, I use Jev for judgments and code for thresholds, caps and budgets. I approve each change, which goes through YouTube's API. So far, I've approved 11 unsubscribes.
 
 A pass through my watch history found 30 channels I watch but don't follow and proposed 13. I declined all of them. Watching a channel often still wasn't enough reason for me to subscribe.
 
-I run it about once a month, started by me: sync subscriptions, collect evidence, let Jev judge, read the proposals and approve. It never runs on its own. YouTube's API terms require refreshing evidence within 30 days, which sets the rhythm.
+I start each review myself: sync subscriptions, collect evidence, let Jev judge, then read and approve proposals. Tidy expires cached evidence after 30 days.
 
 DM me for the repo link and setup guide.
 

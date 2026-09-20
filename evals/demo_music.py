@@ -15,8 +15,9 @@ import numpy as np
 
 SR, BPM = 44100, 112
 BEAT = 60 / BPM
-# scene starts in seconds: title, terminal, race, cost, repeat, finding, loop, guardrails
-CUES = {"title": 0, "terminal": 6, "race": 11, "cost": 36, "repeat": 43, "finding": 49, "loop": 56, "close": 64}
+# scene starts in seconds after the thumbnail lead: title, terminal, race, cost, repeat, finding, loop, guardrails
+LEAD = 1.5  # seconds of thumbnail before the first scene
+CUES = {k: v + LEAD for k, v in {"title": 0, "terminal": 6, "race": 11, "cost": 36, "repeat": 43, "finding": 49, "loop": 56, "close": 64}.items()}
 CHORDS = [(57, [57, 60, 64]), (53, [53, 57, 60]), (48, [48, 52, 55]), (55, [55, 59, 62])]  # Am F C G: bass, triad
 
 
@@ -134,6 +135,6 @@ def write(path, mono):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, default=Path("demo_music.wav"))
-    ap.add_argument("--duration", type=float, default=69.0)
+    ap.add_argument("--duration", type=float, default=70.5)
     args = ap.parse_args()
     write(args.out, render(args.duration))
