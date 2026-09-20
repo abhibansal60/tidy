@@ -40,6 +40,11 @@ tidy judge --schemas titles-desc-v1 --execute
 tidy propose --html .tidy/proposals.html    # open it: proposals with reasons, videos and the commands to act
 ```
 
+The page (synthetic example below) shows a map of the whole feed and one row per channel with Jev's scores, the reasons
+and the commands to record your decision. It is read-only and holds no secrets.
+
+![Review page with synthetic data](docs/assets/review_page.png)
+
 To apply changes: `tidy auth --write`, `tidy approve CHANNEL_ID... --note "why"`, `tidy unsubscribe` (dry run), then
 `tidy unsubscribe --execute`. The full setup, including the Google Cloud steps, is in
 [docs/agent-setup.md](docs/agent-setup.md).
