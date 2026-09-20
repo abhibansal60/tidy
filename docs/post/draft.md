@@ -53,3 +53,16 @@ Repo and setup guide: github.com/abhibansal60/tidy
 - [x] Fable 5.1 stays projected (~$2, not measured), decided by the owner.
 - [ ] Ask TypeSafe whether they want to review the claims and the repo link.
 - [ ] No channel names, IDs or screenshots of the owner's data.
+
+## Follow-up replies (repo is public)
+
+X reply to the thread (267 characters):
+
+The repo is public now: github.com/abhibansal60/tidy
+Install with one curl line, or paste the agent prompt from the README into Claude Code or Codex and let it set Tidy up. It asks before touching your Google account, and nothing runs with --execute until you say so.
+
+LinkedIn comment or edit:
+
+Update: the repo is public. Code, setup guide and the demo: github.com/abhibansal60/tidy
+
+You can install it with one curl line, or paste the agent prompt from the README into Claude Code or Codex and let it do the setup. It stops to ask before it touches your Google account, and it never applies a change without your approval.
