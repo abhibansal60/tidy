@@ -1,3 +1,5 @@
+import base64
+import hashlib
 import re
 import unittest
 
@@ -8,10 +10,11 @@ from test_policy import judgment
 from dataclasses import replace
 
 
-def build(title="Alpha Labs", signals=("value low, Jev (0.4)", "watched 0 times in 42 days"), action="UNSUBSCRIBE", labels=None, gate=None):
+def build(title="Alpha Labs", signals=("value low, Jev (0.4)", "watched 0 times in 42 days"), action="UNSUBSCRIBE", labels=None, gate=None,
+          video_url="https://www.youtube.com/watch?v=v1", data_dir=".tidy"):
     s = replace(sample(channel="chanA", title=title), videos=[
         {"id": "v1", "title": "First <b>video</b>", "description": "", "published_at": "2026-09-01T00:00:00Z",
-         "duration": "PT10M", "url": "https://www.youtube.com/watch?v=v1"}])
+         "duration": "PT10M", "url": video_url}])
     j = judgment(val=0.4)
     j.channel_id = "chanA"
     keep = replace(sample(channel="chanB", title="Beta Beats"), evidence_hash="h2")
@@ -20,7 +23,7 @@ def build(title="Alpha Labs", signals=("value low, Jev (0.4)", "watched 0 times 
     props = [Proposal("chanB", "KEEP", ["watched 5 times in 42 days"], "policy-2", "h2"),
              Proposal("chanA", action, list(signals), "policy-2", "h1")]
     return report_html.render(props, [j, jb], [s, keep], labels or {"chanA": "drop"},
-                              gate or {"open": False, "reasons": ["9 labels, need 30"]})
+                              gate or {"open": False, "reasons": ["9 labels, need 30"]}, data_dir)
 
 
 class ReportHtmlTests(unittest.TestCase):
@@ -29,15 +32,15 @@ class ReportHtmlTests(unittest.TestCase):
 
         for needle in ("Alpha Labs", "UNSUBSCRIBE", "value low, Jev (0.4)", "https://www.youtube.com/channel/chanA",
                        "https://www.youtube.com/watch?v=v1", "9 labels, need 30", "tidy approve chanA",
-                       "tidy label chanA keep", "Owner label: drop"):
+                       "tidy label chanA keep", "Your label: drop"):
             self.assertIn(needle, html)
         self.assertLess(html.index("Alpha Labs"), html.index("Beta Beats"))  # UNSUBSCRIBE before KEEP
 
     def test_counts_per_action_and_expiry_are_in_the_summary(self):
         html = build()
 
-        self.assertRegex(html, r"UNSUBSCRIBE\D+1")
-        self.assertRegex(html, r"KEEP\D+1")
+        self.assertRegex(html, r"(?i)unsubscribe\D+1")
+        self.assertRegex(html, r"(?i)keep\D+1")
         self.assertIn("2026-10-", html)  # sample expiry date (30 days after the fixture's fetch)
 
     def test_hostile_titles_and_signals_are_escaped(self):
@@ -54,6 +57,39 @@ class ReportHtmlTests(unittest.TestCase):
         self.assertIn("Content-Security-Policy", html)
         self.assertIn("default-src 'none'", html)
         self.assertIsNone(re.search(r"<link|@import|<img|<iframe|src=\"http|url\(http", html))
+        self.assertNotIn("unsafe-inline", html)  # scripts and styles are allowed only by hash
+        for tag, directive in (("script", "script-src"), ("style", "style-src")):
+            body = re.search(rf"<{tag}>(.*?)</{tag}>", html, re.S)[1]
+            digest = base64.b64encode(hashlib.sha256(body.encode()).digest()).decode()
+            self.assertIn(f"{directive} 'sha256-{digest}'", html)
+
+    def test_only_youtube_https_urls_become_links(self):
+        for bad in ("javascript:alert(1)", "data:text/html,x", "http://www.youtube.com/watch?v=v1", "https://evil.example/x"):
+            with self.subTest(bad):
+                html = build(video_url=bad)
+                self.assertNotIn(f'href="{bad}', html)
+                self.assertIn("First &lt;b&gt;video&lt;/b&gt;", html)  # the title still shows, as text
+
+    def test_commands_target_the_data_directory_the_page_was_made_from(self):
+        default = build()
+        custom = build(data_dir="/tmp/my data")
+
+        self.assertIn("tidy approve chanA", default)
+        self.assertNotIn("--data-dir", default)
+        self.assertIn("tidy --data-dir '/tmp/my data' approve chanA", custom)
+
+    def test_gate_wording_never_promises_automatic_action(self):
+        opened = build(gate={"open": True, "reasons": []})
+
+        self.assertIn("owner-started", opened)
+        self.assertIn("caps", opened)
+
+    def test_page_explains_the_dry_run_step_and_the_retention_deadline(self):
+        html = build()
+
+        self.assertIn("tidy unsubscribe --execute", html)
+        self.assertIn("dry run", html)
+        self.assertIn("Delete or refresh by 2026-10-", html)
 
 
 class ProposeHtmlCommandTests(unittest.TestCase):

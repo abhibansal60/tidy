@@ -128,7 +128,7 @@ def main(argv=None):
             proposals, judgments, samples = review.derive(db, config)
             if args.html:
                 gate = review.gate_status(review.agreement(db, proposals), config)
-                args.html.write_text(report_html.render(proposals, judgments, samples, review.current_labels(db), gate), encoding="utf-8")
+                args.html.write_text(report_html.render(proposals, judgments, samples, review.current_labels(db), gate, str(args.data_dir)), encoding="utf-8")
                 output = {"html": str(args.html), "channels": len(proposals)}
             else:
                 print(review.render_report(proposals, judgments, samples, review.current_labels(db)))
