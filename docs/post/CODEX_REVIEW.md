@@ -21,7 +21,7 @@ Make both posts as likely to spread as an honest post can be, without a false or
 - Match to the owner's own keep or drop labels (66 channels: 23 keep, 43 drop): every model, Jev included, scored 0.43 to 0.52 (0.5 is a coin flip). Watch history scored 0.69 (95% interval 0.59 to 0.80).
 - Rank agreement with Opus 5: 0.88 to 0.97 on relevance, value, packaging risk.
 - Tidy so far: 11 unsubscribes, each approved by the owner. Watch-history discovery found 30 channels, proposed 13, owner declined all.
-- Outside tests (only if you cite them): independent direct-API tests found Jev about 3 to 6 times faster and far cheaper, with frontier models ahead on open-ended tasks (Every, Pydantic). TypeSafe's own launch claims are higher and vendor-made.
+- Outside tests (only if you cite them): direct-API tests by Pydantic (3.7x vs Sonnet), Vercel (6x vs Gemini Flash Lite) and another developer (3.2x to 5x) found Jev 3 to 6 times faster; Every measured about 25x faster against Fable 5.1 (a large baseline). Frontier models still win some tasks on TypeSafe's own chart. TypeSafe's own launch claims are higher and vendor-made.
 
 ## Report (under 15 lines)
 The edits you made and why, the alternatives you rejected for post 1, and anything you could not verify. Leave the final wording in the two files.

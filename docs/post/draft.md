@@ -20,25 +20,28 @@ Video: `.tidy/tidy_demo.mp4` (1280x720, about 60 s). GIF: `.tidy/tidy_demo.gif`.
 
 7/ So the design: Jev judges (seconds, cents). Code decides (thresholds, caps, budgets). I approve. 11 channels unsubscribed, each signed off. A watch-history pass proposed 13 channels to add. I took none: it proposes, I decide.
 
-8/ Outside numbers agree on direction, not size: independent tests (Every, Pydantic) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models ahead on open-ended tasks. DM me for the repo link.
+8/ Outside numbers agree on direction, not size: independent tests (Pydantic, Vercel) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models ahead on open-ended tasks. DM me for the repo link.
 
 ## LinkedIn
 
-I follow 110 YouTube channels and wanted to know which are worth keeping. That is 110 small judgment calls, so I used it as a test: Jev (TypeSafe's System One model) against seven frontier models, same evidence and prompts.
+Jev judged my 110 YouTube subscriptions in 9 seconds. Sonnet 5 took 3 minutes 8 seconds.
+Neither predicted what I'd keep much better than a coin flip.
 
-What I measured:
-- Speed: 9.1 seconds for all 110 with Jev; 3 to 7 minutes through coding CLIs (Claude Code, Codex), Opus, Sonnet, Haiku, Sol, Astra, Terra and Luna. That is 21x to 48x, but it includes CLI overhead. Public direct-API tests show 3x to 6x, so read it as an upper bound.
-- Cost at list API prices for the run: about $0.004 for Jev; $0.03 (Luna) to $1.11 (Astra) for the others.
-- Consistency: Jev's scores moved 3x to 4x less between two runs than Sonnet 5's.
-- Agreement: rank correlation with Opus 5 of 0.88 to 0.97. Close, not better.
+I tested 8 models: Jev, Opus 5, Sonnet 5, Haiku 4.5, Sol, Astra, Terra and Luna. I gave each the same four questions and prompts.
 
-What surprised me: none of them, Jev included, predicted my own keep/drop decisions (0.43 to 0.52 on 66 labels). My watch history did (0.69). A judgment about quality is not a judgment about taste.
+Jev finished in 9.1 seconds. I timed the others through Claude Code or Codex, with 6 calls in flight. That gave Jev a 21 to 48 times speed advantage, including CLI overhead. Tests by Pydantic, Vercel and another developer found about 3 to 6 times against direct APIs, and frontier models still win some tasks.
 
-So Tidy keeps the roles apart: Jev makes the fast, cheap judgment; code owns thresholds, caps and budgets; I approve every change. Eleven unsubscribes, each approved by me. A watch-history pass that finds channels I watch but do not follow proposed 13 to add (from 30 candidates); I declined all of them. The loop proposes, I decide.
+At list API prices, my run came to $0.004 for Jev and $0.03 (Luna) to $1.11 (Astra) for the others. Fable 5.1 would be about $2 by my projection. I didn't run it.
 
-Takeaway: use a decision model where you need many fast, repeatable calls, keep humans on anything irreversible, and measure against your own labels before trusting any score.
+On 30 channels over two runs, Jev's scores moved 3 to 4 times less than Sonnet 5's. That's one person's repeatability test. Its rank agreement with Opus 5 was 0.88 to 0.97 on relevance, value and packaging risk.
 
-Happy to share the repo: DM me.
+Against my keep or drop labels on 66 channels, every model scored 0.43 to 0.52. On this measure, 0.5 is a coin flip. My watch history scored 0.69 (95% interval: 0.59 to 0.80). It predicted my choices better in this test, though imperfectly.
+
+In Tidy, I use Jev for judgments and code for thresholds, caps and budgets, with one API call per change and no browser agent clicking around. I approve every change. So far, I've approved 11 unsubscribes.
+
+A pass through my watch history found 30 channels I watch but don't follow and proposed 13. I declined all of them. Watching a channel often still wasn't enough reason for me to subscribe.
+
+DM me for the repo link.
 
 ## Before posting (checklist)
 

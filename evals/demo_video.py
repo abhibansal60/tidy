@@ -201,8 +201,9 @@ def loop(d, t, data):
         text(d, (x + 24, 386), head, 30, color, BOLD, alpha=a)
         for j, line in enumerate(body):
             text(d, (x + 24, 440 + j * 30), line, 20, INK, SANS, alpha=a)
-    text(d, (W // 2, 600), "Gated autonomy: per-run caps (5 unsubscribes, 3 subscribes), owner-started, never unattended.", 22, DIM, SANS, "mm", ease((t - 3.6) / 0.7))
-    text(d, (W // 2, 650), "The feed stays current without me reviewing 110 channels by hand.", 28, JEV, BOLD, "mm", ease((t - 4.4) / 0.7))
+    text(d, (W // 2, 566), "Caps per run: 5 unsubscribes, 3 subscribes. Owner-started, never unattended.", 20, DIM, SANS, "mm", ease((t - 3.4) / 0.7))
+    text(d, (W // 2, 610), "No browser agent clicking around: one API call per change, no model in the click.", 24, INK, BOLD, "mm", ease((t - 4.2) / 0.7))
+    text(d, (W // 2, 662), "The feed stays current without me reviewing 110 channels by hand.", 28, JEV, BOLD, "mm", ease((t - 5.0) / 0.7))
 
 
 def guardrails(d, t, data):
@@ -215,7 +216,7 @@ def guardrails(d, t, data):
     text(d, (W // 2, 640), "Tidy · built on Jev (TypeSafe System One)", 26, JEV, SANS, "mm", ease((t - 3) / 0.8))
 
 
-SCENES = [(title, 6.0), (terminal, 5.0), (race, 25.0), (cost, 7.0), (repeat, 6.0), (finding, 7.0), (loop, 7.0), (guardrails, 5.0)]
+SCENES = [(title, 6.0), (terminal, 5.0), (race, 25.0), (cost, 7.0), (repeat, 6.0), (finding, 7.0), (loop, 8.0), (guardrails, 5.0)]
 FADE = 0.4
 
 
