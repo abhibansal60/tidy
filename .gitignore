@@ -25,3 +25,5 @@ __pycache__/
 /unsub_candidates_live.md
 .jev/
 .claude/
+
+node_modules/
