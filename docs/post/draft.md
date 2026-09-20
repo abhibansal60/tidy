@@ -16,11 +16,11 @@ Video: `.tidy/tidy_demo.mp4` (1280x720, about 60 s). GIF: `.tidy/tidy_demo.gif`.
 
 5/ Agreement. On rank order, Jev tracks Opus 5 closely: correlation 0.94 relevance, 0.88 value, 0.97 packaging risk. It is not better. It is close, fast and cheap.
 
-6/ The honest part. I checked every judge against my own keep/drop labels (34 channels). Jev and all seven models scored 0.45 to 0.60, near a coin flip. My watch history scored 0.80. Quality is not taste. No model knew what I would actually keep.
+6/ The honest part. I checked every judge against my own keep/drop labels (66 channels). Jev and all seven models scored 0.43 to 0.52, near a coin flip. My watch history scored 0.69. Quality is not taste. No model knew what I would actually keep.
 
 7/ So the design: Jev judges (seconds, cents). Code decides (thresholds, caps, budgets). I approve. 11 channels unsubscribed, each signed off. A watch-history pass proposed 13 channels to add. I took none: it proposes, I decide.
 
-8/ Outside numbers agree on direction, not size: independent tests (Every, Pydantic) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models ahead on open-ended tasks. Code and method: github.com/abhibansal60/tidy
+8/ Outside numbers agree on direction, not size: independent tests (Every, Pydantic) found Jev 3x to 6x faster on direct APIs and far cheaper, with frontier models ahead on open-ended tasks. DM me for the repo link.
 
 ## LinkedIn
 
@@ -32,11 +32,13 @@ What I measured:
 - Consistency: Jev's scores moved 3x to 4x less between two runs than Sonnet 5's.
 - Agreement: rank correlation with Opus 5 of 0.88 to 0.97. Close, not better.
 
-What surprised me: none of them, Jev included, predicted my own keep/drop decisions (0.45 to 0.60 on 34 labels). My watch history did (0.80). A judgment about quality is not a judgment about taste.
+What surprised me: none of them, Jev included, predicted my own keep/drop decisions (0.43 to 0.52 on 66 labels). My watch history did (0.69). A judgment about quality is not a judgment about taste.
 
 So Tidy keeps the roles apart: Jev makes the fast, cheap judgment; code owns thresholds, caps and budgets; I approve every change. Eleven unsubscribes, each approved by me. A watch-history pass that finds channels I watch but do not follow proposed 13 to add (from 30 candidates); I declined all of them. The loop proposes, I decide.
 
 Takeaway: use a decision model where you need many fast, repeatable calls, keep humans on anything irreversible, and measure against your own labels before trusting any score.
+
+Happy to share the repo: DM me.
 
 ## Before posting (checklist)
 

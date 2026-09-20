@@ -165,9 +165,9 @@ def repeat(d, t, data):
 
 def finding(d, t, data):
     text(d, (90, 70), "But does the score match what I actually keep?", 36, INK, BOLD)
-    text(d, (90, 124), "Checked against my own keep / drop labels (34 channels). 0.5 = coin flip, 1.0 = perfect.", 22, DIM)
-    rows = [("Quality scores", "Jev, Opus 5 and Haiku", 0.5, DIM, "about 0.5"),
-            ("My watch history", "counted from Google Takeout", 0.80, JEV, "0.80")]
+    text(d, (90, 124), "Checked against my own keep / drop labels (66 channels). 0.5 = coin flip, 1.0 = perfect.", 22, DIM)
+    rows = [("Quality scores", "Jev and all seven others: 0.43 to 0.52", 0.5, DIM, "about 0.5"),
+            ("My watch history", "counted from Google Takeout", 0.69, JEV, "0.69")]
     x0, span = 90, 1100
     for i, (name, note, value, color, shown) in enumerate(rows):
         y = 230 + i * 170
