@@ -8,7 +8,7 @@ from google.auth.exceptions import GoogleAuthError
 from oauthlib.oauth2 import OAuth2Error
 import requests
 
-from . import discovery, escalate, experiment, judge, mutate, pilot, profile, review, store
+from . import discovery, escalate, experiment, judge, mutate, pilot, profile, report_html, review, store
 from .proposal import Proposal
 from .youtube import APIError, YouTube, authorize, load_credentials, save_credentials, session_for
 
@@ -77,7 +77,8 @@ def main(argv=None):
     second = commands.add_parser("escalate", help="Second opinion on channels Jev flags as low quality: dry run by default")
     second.add_argument("--model", default="claude-opus-5")
     second.add_argument("--execute", action="store_true")
-    commands.add_parser("propose", help="Offline: Markdown report of proposals from stored samples and judgments")
+    proposals = commands.add_parser("propose", help="Offline: Markdown report of proposals from stored samples and judgments")
+    proposals.add_argument("--html", type=Path, help="Write a self-contained HTML review page to this path instead of Markdown")
     commands.add_parser("gate", help="Offline: agreement with owner labels and calibration gate status")
     mark = commands.add_parser("label", help="Record an owner label")
     mark.add_argument("channel_id")
@@ -123,9 +124,15 @@ def main(argv=None):
             config = profile.load(args.data_dir / "profile.json")
             output = escalate.run(db, config, escalate.ask, args.model) if args.execute else escalate.plan(db, config)
         elif args.command == "propose":
-            proposals, judgments, samples = review.derive(db, profile.load(args.data_dir / "profile.json"))
-            print(review.render_report(proposals, judgments, samples, review.current_labels(db)))
-            return 0
+            config = profile.load(args.data_dir / "profile.json")
+            proposals, judgments, samples = review.derive(db, config)
+            if args.html:
+                gate = review.gate_status(review.agreement(db, proposals), config)
+                args.html.write_text(report_html.render(proposals, judgments, samples, review.current_labels(db), gate), encoding="utf-8")
+                output = {"html": str(args.html), "channels": len(proposals)}
+            else:
+                print(review.render_report(proposals, judgments, samples, review.current_labels(db)))
+                return 0
         elif args.command == "gate":
             config = profile.load(args.data_dir / "profile.json")
             stats = review.agreement(db, review.derive(db, config)[0])

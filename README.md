@@ -37,7 +37,7 @@ tidy auth                                   # read-only sign-in (opens a browser
 tidy sync                                   # fetch your subscriptions
 tidy collect --all --max-units 400 --execute
 tidy judge --schemas titles-desc-v1 --execute
-tidy propose > .tidy/proposals.md           # read it: KEEP, REVIEW, UNSUBSCRIBE, SUBSCRIBE, with reasons
+tidy propose --html .tidy/proposals.html    # open it: proposals with reasons, videos and the commands to act
 ```
 
 To apply changes: `tidy auth --write`, `tidy approve CHANNEL_ID... --note "why"`, `tidy unsubscribe` (dry run), then

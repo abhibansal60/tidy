@@ -34,7 +34,7 @@ and ask, do not guess.
    `.tidy/profile.json` (keys and defaults are in `tidy/profile.py`; see `docs/reference.md`).
 9. **Judge.** `tidy judge --schemas titles-desc-v1` (dry run), then with go-ahead `--execute`. If `profile.json` sets a
    different `schema_id`, use that.
-10. **Propose.** `tidy propose > .tidy/proposals.md`. Summarize counts per action and the top signals. Do not approve
+10. **Propose.** `tidy propose --html .tidy/proposals.html` (or `tidy propose > .tidy/proposals.md` for Markdown). Summarize counts per action and the top signals. Do not approve
     anything for the person.
 11. **Optional: second opinion and discovery.** `tidy escalate` (dry run) and `tidy discover` (dry run) list what they
     would send or fetch.
