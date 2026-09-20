@@ -1,4 +1,5 @@
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
 import sqlite3
@@ -79,6 +80,7 @@ def main(argv=None):
     second.add_argument("--execute", action="store_true")
     proposals = commands.add_parser("propose", help="Offline: Markdown report of proposals from stored samples and judgments")
     proposals.add_argument("--html", type=Path, help="Write a self-contained HTML review page to this path instead of Markdown")
+    proposals.add_argument("--json", type=Path, help="Write the proposals as a JSON list that `tidy act --proposals` reads")
     commands.add_parser("gate", help="Offline: agreement with owner labels and calibration gate status")
     mark = commands.add_parser("label", help="Record an owner label")
     mark.add_argument("channel_id")
@@ -126,7 +128,10 @@ def main(argv=None):
         elif args.command == "propose":
             config = profile.load(args.data_dir / "profile.json")
             proposals, judgments, samples = review.derive(db, config)
-            if args.html:
+            if args.json:
+                args.json.write_text(json.dumps([asdict(p) for p in proposals], indent=1), encoding="utf-8")
+                output = {"json": str(args.json), "channels": len(proposals)}
+            elif args.html:
                 gate = review.gate_status(review.agreement(db, proposals), config)
                 args.html.write_text(report_html.render(proposals, judgments, samples, review.current_labels(db), gate, str(args.data_dir)), encoding="utf-8")
                 output = {"html": str(args.html), "channels": len(proposals)}

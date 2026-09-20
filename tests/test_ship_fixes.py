@@ -65,6 +65,18 @@ class JudgeInterestsTests(unittest.TestCase):
             self.assertEqual(plan.call_args.args[2], "woodworking and jazz")
 
 
+class ProposeJsonTests(unittest.TestCase):
+    def test_propose_json_writes_the_list_that_act_reads(self):
+        with tempfile.TemporaryDirectory() as d:
+            path, out = Path(d) / "proposals.json", io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(main(["--data-dir", d, "propose", "--json", str(path)]), 0)
+
+            self.assertEqual(json.loads(path.read_text()), [])
+            self.assertEqual(json.loads(out.getvalue()), {"json": str(path), "channels": 0})
+            self.assertEqual([Proposal(**p) for p in json.loads(path.read_text())], [])
+
+
 class ActSafetyTests(unittest.TestCase):
     def test_duplicate_proposals_never_mutate_twice(self):
         props = [Proposal("a", "UNSUBSCRIBE", ["x", "y"]), Proposal("a", "UNSUBSCRIBE", ["x", "y"])]

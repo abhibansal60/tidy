@@ -165,7 +165,7 @@ unless you open them:
 .venv/bin/python -m tidy resubscribe CHANNEL_ID... [--execute]              # undo an automatic unsubscribe
 ```
 
-`proposals.json` is a list of Proposal dicts. Per run, at most 5 unsubscribes and 3
+`proposals.json` is a list of Proposal dicts; `tidy propose --json proposals.json` writes it. Per run, at most 5 unsubscribes and 3
 subscribes (`--cap-unsubscribe`, `--cap-subscribe`). A proposal with fewer than two
 signals is never acted on. If the eligible unsubscribes exceed the larger of three
 times the cap or 20% of active subscriptions, the whole run aborts with no action.

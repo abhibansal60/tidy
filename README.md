@@ -46,7 +46,10 @@ and the commands to record your decision. It is read-only and holds no secrets.
 ![Review page with synthetic data](docs/assets/review_page.png)
 
 To apply changes: `tidy auth --write`, `tidy approve CHANNEL_ID... --note "why"`, `tidy unsubscribe` (dry run), then
-`tidy unsubscribe --execute`. The full setup, including the Google Cloud steps, is in
+`tidy unsubscribe --execute`. To act on SUBSCRIBE proposals (channels you watch but do not follow), write them with
+`tidy propose --json .tidy/proposals.json`, then `tidy act --proposals .tidy/proposals.json --gate-subscribe` is a dry run
+that shows what would happen within the per-run cap of 3; `--execute` applies it once the calibration gate is open or
+you pass `--override-gate`. The full setup, including the Google Cloud steps, is in
 [docs/agent-setup.md](docs/agent-setup.md).
 
 ## Set it up with an agent
