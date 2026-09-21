@@ -87,5 +87,5 @@ channels its owner keeps; the owner's watch history did better. Details and cave
 
 ## More
 
-[Reference](docs/reference.md) · [Agent setup](docs/agent-setup.md) · [Design](docs/design/modules.md) ·
+[Jev playbook](docs/guide/jev-playbook.md) · [Reference](docs/reference.md) · [Agent setup](docs/agent-setup.md) · [Design](docs/design/modules.md) ·
 [Decisions](docs/adr) · [Evals](evals) · [License](LICENSE) (MIT)
