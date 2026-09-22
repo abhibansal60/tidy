@@ -127,7 +127,7 @@ def main(argv=None):
     mail_triage.add_argument("--html", type=Path, help="Write a self-contained HTML dashboard to this path")
     mail_triage.add_argument("--json", type=Path, help="Write the full run (messages, judgments, proposals, outcomes) as JSON")
     mail_act = commands.add_parser("mail-act", help="Apply held TRASH/SPAM proposals from a saved mail-triage run; dry run unless --execute. ARCHIVE already auto-applies from mail-triage, so it is not included here.")
-    mail_act.add_argument("--run", type=Path, required=True, help="A run.json written by `mail-triage --json`")
+    mail_act.add_argument("--run", type=Path, nargs="+", required=True, help="One or more run files written by `mail-triage --json`")
     mail_act.add_argument("--actions", nargs="+", choices=["TRASH", "SPAM"], default=["TRASH", "SPAM"])
     mail_act.add_argument("--max-calls", type=int, default=1000)
     mail_act.add_argument("--force-reapply", action="store_true", help="Also re-run rows already marked outcome=applied in --run (e.g. after manually restoring a message)")
@@ -196,12 +196,14 @@ def main(argv=None):
         elif args.command == "mail-triage" and not args.execute:
             output = {"query": args.query, "limit": args.limit, "executes": False}
         elif args.command == "mail-act":
-            run_doc = json.loads(args.run.read_text())
-            rows = run_doc["rows"]
-            eligible = [r for r in rows if r["action"] in args.actions
-                       and (args.force_reapply or r.get("outcome") != "applied")]
+            # Several run files are allowed (the daily cron writes one per day); see mail.select_held. Files are rewritten in place.
+            docs = [(path, json.loads(path.read_text())) for path in args.run]
+            eligible = mail.select_held([doc for _, doc in docs], args.actions, args.force_reapply)
             if not args.execute:
-                output = {"run": str(args.run), "actions": args.actions, "messages": len(eligible), "executes": False}
+                output = {"run": [str(p) for p in args.run], "actions": args.actions, "messages": len(eligible),
+                          "executes": False,
+                          "preview": [{"id": r["id"], "action": r["action"], "subject": r["subject"],
+                                       "sender": r["sender"], "category": r["category"]} for r in eligible]}
             else:
                 config_file = args.data_dir / "config.json"
                 if not config_file.is_file():
@@ -215,17 +217,20 @@ def main(argv=None):
                 with gmail_session_for(credentials) as session:
                     api = Gmail(session, args.max_calls)
                     api.identity(email)
-                    outcomes = mail.apply(api, [(r["id"], r["action"]) for r in eligible])
+                    valid, outcomes = mail.recheck(api, [(r["id"], r["action"]) for r in eligible])
+                    outcomes.update(mail.apply(api, valid))
                 gmail_save_credentials(write_token_path, credentials, write=True)
-                # Persist outcomes back into the run file: a rerun then skips what already succeeded, so it
+                # Persist outcomes back into the run files: a rerun then skips what already succeeded, so it
                 # never re-trashes a message the owner has since manually restored (unless --force-reapply).
-                for r in eligible:
+                for r in eligible:  # the selected row objects live inside `docs`, so this updates exactly them
                     if r["id"] in outcomes:
                         r["outcome"] = outcomes[r["id"]]
-                args.run.write_text(json.dumps(run_doc, indent=1), encoding="utf-8")
-                output = {"run": str(args.run), "actions": args.actions,
+                for path, doc in docs:
+                    path.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+                output = {"run": [str(p) for p in args.run], "actions": args.actions,
                           "applied": sum(v == "applied" for v in outcomes.values()),
-                          "errors": {i: v for i, v in outcomes.items() if v != "applied"}}
+                          "skipped": {i: v for i, v in outcomes.items() if v.startswith("skipped")},
+                          "errors": {i: v for i, v in outcomes.items() if v.startswith("error")}}
         elif args.command in ("mail-auth", "mail-triage"):
             config_file = args.data_dir / "config.json"
             if not config_file.is_file():
@@ -244,6 +249,8 @@ def main(argv=None):
                 gmail_save_credentials(token_path, credentials, args.write)
                 output = {"authorized": True, "write": args.write, **identity}
             else:
+                if args.cap_archive < 0:
+                    raise ValueError("--cap-archive must not be negative.")
                 token_path = args.data_dir / "token_mail.json"
                 if not token_path.is_file():
                     raise ValueError("No Gmail OAuth token. Run mail-auth first; see README.")
@@ -255,9 +262,8 @@ def main(argv=None):
                 gmail_save_credentials(token_path, credentials)
                 with experiment.typesafe_client() as client:
                     judgments = mail.classify_batch(client, messages, email, db=db)
-                proposals = {i: mail.propose(j) for i, j in judgments.items() if not isinstance(j, str)}
-                if args.cap_archive < 0:
-                    raise ValueError("--cap-archive must not be negative.")
+                by_id = {m["id"]: m for m in messages}
+                proposals = {i: mail.propose(j, by_id[i]["label_ids"]) for i, j in judgments.items() if not isinstance(j, str)}
                 gate = mail.gate_status()
                 outcomes = {}
                 if args.apply:
@@ -276,9 +282,8 @@ def main(argv=None):
                             auto = [(i, p.action) for i, p in proposals.items() if p.action in mail.AUTO_ACTIONS][:args.cap_archive]
                             outcomes = mail.apply(write_api, auto)
                     gmail_save_credentials(write_token_path, write_credentials, write=True)
-                by_id = {m["id"]: m for m in messages}
                 rows = [{"id": i, "thread_id": judgments[i].thread_id, "subject": by_id[i]["subject"],
-                        "sender": by_id[i]["sender"], "snippet": by_id[i]["snippet"],
+                        "sender": by_id[i]["sender"], "snippet": by_id[i]["snippet"], "labels": by_id[i]["label_ids"],
                         "facts": judgments[i].facts, "category": p.category,
                         "confidence": judgments[i].confidence, "probabilities": judgments[i].probabilities,
                         "model": judgments[i].model, "judged_at": judgments[i].judged_at, "usage": judgments[i].usage,
@@ -291,7 +296,7 @@ def main(argv=None):
                 if args.html:
                     args.html.write_text(mail_report_html.render(rows, applied=args.apply), encoding="utf-8")
                 if args.json:
-                    args.json.write_text(json.dumps({"rows": rows, "errors": {i: j for i, j in judgments.items() if isinstance(j, str)}}, indent=1), encoding="utf-8")
+                    args.json.write_text(json.dumps({"run_at": store.now(), "query": args.query, "rows": rows, "errors": {i: j for i, j in judgments.items() if isinstance(j, str)}}, indent=1), encoding="utf-8")
                 mutation_errors = {i: v for i, v in outcomes.items() if v != "applied"}
                 output = {"messages": len(messages), "errors": {i: j for i, j in judgments.items() if isinstance(j, str)},
                           "applied": args.apply, "gate": gate, "gate_overridden": args.apply and not gate["open"] and args.override_gate,

@@ -42,6 +42,24 @@ class RenderTests(unittest.TestCase):
 
         self.assertNotIn("Unsubscribe", html)
 
+    def test_unsubscribe_shortlist_groups_by_sender_most_first(self):
+        unsub = {"http": "https://x.com/u", "mailto": None}
+        rows = [row(id=f"a{i}", sender="Shop <deals@shop.com>", action="TRASH", unsubscribe=unsub) for i in range(3)]
+        rows += [row(id="b1", sender="News <n@news.com>", unsubscribe=unsub),
+                 row(id="c1", sender="Friend <f@x.com>", action="KEEP", unsubscribe=unsub)]  # KEEP never shortlisted
+
+        html = mail_report_html.render(rows)
+
+        self.assertIn("Unsubscribe shortlist", html)
+        self.assertIn("2 bulk senders", html)
+        self.assertLess(html.index("Shop (3)"), html.index("News (1)"))
+        self.assertNotIn("Friend (", html)
+
+    def test_no_dashes_in_lede_prose(self):
+        html = mail_report_html.render([row(action="TRASH", outcome="held")], applied=True)
+        self.assertNotIn("\u2014", html)
+        self.assertNotIn("\u2013", html)
+
     def test_error_outcome_shown_verbatim_not_hidden(self):
         html = mail_report_html.render([row(action="TRASH", category="Promos", outcome="error: quota exceeded")], applied=True)
 

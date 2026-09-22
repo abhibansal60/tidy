@@ -232,3 +232,23 @@ class BudgetTests(unittest.TestCase):
         api = Gmail(Mock())
         with self.assertRaises(ValueError):
             api.get("subscriptions")
+
+
+class MessageIdTests(unittest.TestCase):
+    def test_path_like_ids_never_reach_the_api(self):
+        session = Mock()
+        api = Gmail(session)
+        for bad in ("../profile", "m1/trash", "m1?x=1", "", None):
+            with self.assertRaises(ValueError):
+                api.trash(bad)
+            with self.assertRaises(ValueError):
+                api.batch_modify([bad], remove=["INBOX"])
+        session.post.assert_not_called()
+
+    def test_labels_reads_minimal_format(self):
+        session = Mock()
+        session.get.return_value = response({"id": "m1", "labelIds": ["INBOX", "STARRED"]})
+        api = Gmail(session)
+
+        self.assertEqual(api.labels("m1"), ["INBOX", "STARRED"])
+        self.assertEqual(session.get.call_args.kwargs["params"], {"format": "minimal"})

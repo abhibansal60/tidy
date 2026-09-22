@@ -34,7 +34,7 @@ QUESTIONS = {
 }
 
 # Category -> proposed action. Never auto-executed here; a later gated step applies it.
-POLICY_VERSION = "mail-policy-2"
+POLICY_VERSION = "mail-policy-3"
 ACTION_FOR_CATEGORY = {
     "Needs Reply": "KEEP",
     "Updates": "ARCHIVE",
@@ -43,6 +43,12 @@ ACTION_FOR_CATEGORY = {
     "Spam": "SPAM",
 }
 CONFIDENCE_MIN = 0.6  # below this, propose REVIEW instead of trusting the category
+# Jev often splits clearly-bulk mail between Updates and Promos (e.g. 0.55/0.45). Neither alone clears
+# CONFIDENCE_MIN, but together they say "bulk, nothing to answer". Code-owned arithmetic over Jev's own
+# probabilities: that case gets the mildest bulk action (ARCHIVE, reversible), never TRASH.
+BULK_SPLIT = ("Updates", "Promos")
+BULK_SPLIT_MIN = 0.9
+BULK_NEEDS_REPLY_MAX = 0.05
 EXECUTABLE_ACTIONS = {"ARCHIVE", "TRASH", "SPAM"}
 AUTO_ACTIONS = {"ARCHIVE"}  # everything else (TRASH, SPAM) is proposed but held for a separate gated mail-act step
 
@@ -71,7 +77,7 @@ class MailJudgment:
 @dataclass
 class MailProposal:
     message_id: str
-    action: str  # KEEP, ARCHIVE, SPAM, REVIEW
+    action: str  # KEEP, ARCHIVE, TRASH, SPAM, REVIEW
     category: str
     signals: list
     policy_version: str = POLICY_VERSION
@@ -134,22 +140,41 @@ def _addressed_directly(message, owner_email):
     return len(to_addrs) == 1 and to_addrs[0] == owner_email.casefold()
 
 
-def propose(judgment):
+# Gmail's own tab classifier: an independent, non-Jev signal that a message is bulk (Primary has no label).
+BULK_LABELS = {"CATEGORY_UPDATES", "CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_FORUMS"}
+PROTECTED_LABELS = {"STARRED"}  # the owner's own "keep this" signal: never proposed for any action
+
+
+def propose(judgment, labels=()):
+    """`labels`: the message's current Gmail label IDs (from `gmail.parse_message`), code-owned state Jev never sees."""
+    protected = PROTECTED_LABELS & set(labels)
+    if protected:
+        return MailProposal(judgment.message_id, "KEEP", judgment.category, [f"owner-protected ({', '.join(sorted(protected))})"])
     if judgment.category not in ACTION_FOR_CATEGORY:
         return MailProposal(judgment.message_id, "REVIEW", judgment.category, ["unknown category"])
-    if judgment.confidence < CONFIDENCE_MIN:
+    probs = judgment.probabilities or {}
+    bulk = sum(probs.get(c, 0) for c in BULK_SPLIT)
+    if judgment.confidence >= CONFIDENCE_MIN:
+        action = ACTION_FOR_CATEGORY[judgment.category]
+        signals = [f"category {judgment.category} ({judgment.confidence:.2f})"]
+    elif (judgment.category in BULK_SPLIT and bulk >= BULK_SPLIT_MIN
+          and probs.get("Needs Reply", 0) <= BULK_NEEDS_REPLY_MAX):
+        action = "ARCHIVE"
+        signals = [f"bulk split: Updates+Promos {bulk:.2f}, Needs Reply {probs.get('Needs Reply', 0):.2f}"]
+    else:
         return MailProposal(judgment.message_id, "REVIEW", judgment.category,
                             [f"confidence low ({judgment.confidence:.2f})"])
-    action = ACTION_FOR_CATEGORY[judgment.category]
-    signals = [f"category {judgment.category} ({judgment.confidence:.2f})"]
     if action in AUTO_ACTIONS:
         # Never auto-apply on Jev's category alone (AGENTS.md/ADR 0005): needs an independent, code-owned
         # signal corroborating "this looks automated/bulk", same shape as policy.py's two-dimension rule.
         facts = judgment.facts or {}
-        corroborated = facts.get("list_unsubscribe_header") or not facts.get("addressed_directly")
+        gmail_tab = sorted(BULK_LABELS & set(labels))
+        corroborated = facts.get("list_unsubscribe_header") or not facts.get("addressed_directly") or gmail_tab
         if not corroborated:
             return MailProposal(judgment.message_id, "REVIEW", judgment.category,
-                                signals + ["no independent corroborating signal (personally addressed, no unsubscribe header)"])
+                                signals + ["no independent corroborating signal (personally addressed, no unsubscribe header, Gmail Primary tab)"])
+        if gmail_tab and not facts.get("list_unsubscribe_header") and facts.get("addressed_directly"):
+            signals.append(f"corroborated by Gmail tab ({gmail_tab[0]})")
     return MailProposal(judgment.message_id, action, judgment.category, signals)
 
 
@@ -161,6 +186,42 @@ BATCH_MODIFY_LIMIT = 1000  # Gmail's messages.batchModify hard cap
 
 def _chunks(items, size):
     return [items[i:i + size] for i in range(0, len(items), size)]
+
+
+def select_held(docs, actions, force_reapply=False):
+    """Rows to apply from one or more `mail-triage --json` run docs. The newest run (by its recorded `run_at`,
+    not argument or glob order) decides each message's action; a message already applied in ANY run is
+    skipped unless `force_reapply`, so a message the owner restored is never re-trashed by an older file.
+    Returns the row dicts themselves (not copies), so callers can record outcomes in place."""
+    latest, applied = {}, set()
+    for doc in sorted(docs, key=lambda d: d.get("run_at", "")):
+        for r in doc["rows"]:
+            latest[r["id"]] = r
+            if r.get("outcome") == "applied":
+                applied.add(r["id"])
+    return [r for r in latest.values() if r["action"] in actions and (force_reapply or r["id"] not in applied)]
+
+
+def recheck(api, pairs):
+    """Re-read each message's live labels right before a held (TRASH/SPAM) proposal is applied, same rule as
+    ADR 0002's live-list recheck: a run file can be days old, and the owner may have since moved, starred or
+    already cleaned a message. Returns (still_valid_pairs, {message_id: "skipped: ..."})."""
+    valid, skipped = [], {}
+    for message_id, action in pairs:
+        if action not in EXECUTABLE_ACTIONS:
+            continue
+        try:
+            labels = set(api.labels(message_id))
+        except APIError as error:
+            skipped[message_id] = f"skipped: could not recheck ({error})"
+            continue
+        if "INBOX" not in labels:
+            skipped[message_id] = "skipped: no longer in inbox"
+        elif PROTECTED_LABELS & labels:
+            skipped[message_id] = "skipped: starred since the run"
+        else:
+            valid.append((message_id, action))
+    return valid, skipped
 
 
 def apply(api, pairs):

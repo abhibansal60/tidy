@@ -28,6 +28,17 @@ class APIError(RuntimeError):
     pass
 
 
+_ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
+
+
+def check_id(message_id):
+    """Gmail message IDs are short hex strings (allowed: URL-safe word chars). IDs can come from a hand-editable run.json (`mail-act`),
+    so validate before they go into a URL path: nothing like `../` or `?` ever reaches the API."""
+    if not isinstance(message_id, str) or not _ID_RE.fullmatch(message_id):
+        raise ValueError(f"Invalid Gmail message ID: {message_id!r}")
+    return message_id
+
+
 RETRY_ATTEMPTS = 6  # Gmail's quota is per-minute, not per-second; a short retry budget gives up too early.
 _RATE_LIMIT_REASONS = {"rateLimitExceeded", "quotaExceeded", "userRateLimitExceeded"}
 
@@ -167,12 +178,17 @@ class Gmail:
         return ids[:limit]
 
     def message(self, message_id):
-        return self.get(f"messages/{message_id}", format="full")
+        return self.get(f"messages/{check_id(message_id)}", format="full")
+
+    def labels(self, message_id):
+        """Current label IDs for one message (cheap `format=minimal` read), for rechecking live state before a mutation."""
+        return self.get(f"messages/{check_id(message_id)}", format="minimal").get("labelIds", []) or []
 
     def batch_modify(self, ids, add=(), remove=()):
         """Label-only mutation (archive: remove INBOX; spam: add SPAM, remove INBOX). Idempotent, safe to retry."""
         if not ids:
             return
+        ids = [check_id(i) for i in ids]
         if len(ids) > 1000:
             raise ValueError("Gmail batchModify allows at most 1000 ids per call.")
         allowed = {"INBOX", "SPAM"}
@@ -205,7 +221,7 @@ class Gmail:
                 raise APIError("Local call budget reached.")
             self.calls += 1
             try:
-                response = self.session.post(API + f"messages/{message_id}/trash", timeout=30, allow_redirects=False)
+                response = self.session.post(API + f"messages/{check_id(message_id)}/trash", timeout=30, allow_redirects=False)
             except requests.RequestException:
                 if attempt == RETRY_ATTEMPTS - 1:
                     raise APIError("Network request failed; rerun is safe (trash is idempotent).") from None
@@ -234,7 +250,7 @@ _UNSUB_URL_RE = re.compile(r"<([^>]+)>")
 def parse_list_unsubscribe(value):
     """The mailto: and http(s): links in a List-Unsubscribe header, e.g. '<mailto:a@b.com>, <https://...>'.
     Display only: Tidy never fetches or emails these itself (clicking an unknown unsubscribe link is its own
-    minor risk — can confirm a live inbox to a sender — so it stays the owner's call, one link at a time)."""
+    minor risk, since it can confirm a live inbox to a sender, so it stays the owner's call, one link at a time)."""
     links = {"mailto": None, "http": None}
     for url in _UNSUB_URL_RE.findall(value or ""):
         if url.lower().startswith("mailto:") and links["mailto"] is None:

@@ -7,6 +7,7 @@ than a scored map.
 """
 
 import base64
+from email.utils import parseaddr
 from html import escape
 import hashlib
 
@@ -41,6 +42,8 @@ summary:hover{background:var(--paper)}
 .REVIEW .verdict{color:var(--review)}.ARCHIVE .verdict{color:var(--archive)}.TRASH .verdict{color:var(--trash)}.SPAM .verdict{color:var(--spam)}.KEEP .verdict{color:var(--keep)}
 .body{padding:4px 14px 20px;display:grid;gap:10px;max-width:76ch;color:var(--muted);font-size:14px}
 .key{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}
+.senders{margin:28px 0 8px;font-size:14px}.senders h2{font:600 18px/1.3 "Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;margin:0 0 6px}
+.senders ol{margin:0;padding-left:22px;color:var(--muted)}.senders li{margin:2px 0}.senders a{color:var(--ink)}
 .k-REVIEW{background:var(--review)}.k-ARCHIVE{background:var(--archive)}.k-TRASH{background:var(--trash)}.k-SPAM{background:var(--spam)}.k-KEEP{background:var(--keep)}
 @media (max-width:640px){main{padding:24px 14px 72px}summary{grid-template-columns:1fr auto}.num{grid-column:1}.verdict{grid-row:1;grid-column:2}}
 """
@@ -74,6 +77,7 @@ def render(rows, applied=False):
 <title>Tidy mail triage</title><style>{CSS}</style></head><body><main>
 <h1>Tidy mail triage</h1>
 <p class="lede">{escape(lede)}</p>
+{_senders(ordered)}
 <div class="tools">{tabs}<input id="q" type="search" placeholder="Search subject/sender" aria-label="Search subject or sender"></div>
 {body_rows}
 </main><script>{JS}</script></body></html>
@@ -85,13 +89,40 @@ def _lede_tail(ordered, applied):
         return "Nothing was applied to Gmail; this is a dry run."
     done = sum(r.get("outcome") == "applied" for r in ordered)
     if done == 0:
-        return ("Nothing was actually applied this run (closed gate, cap, or a failure) — everything below is "
+        return ("Nothing was actually applied this run (closed gate, cap, or a failure), so everything below is "
                "a held proposal. Check the run's `gate`/`action_counts`, then `tidy mail-act --execute` for TRASH/SPAM.")
     return (f"{done} action(s) below were applied to Gmail. The rest are held for your review "
            "(`tidy mail-act --execute`) or were never touched (KEEP/REVIEW).")
 
 
+SENDERS_SHOWN = 15
+
+
+def _senders(rows):
+    """Unsubscribe shortlist: bulk senders (not KEEP/REVIEW) that carry an unsubscribe link, most messages first.
+    One click per sender instead of one per email; still a link the owner clicks, never fetched by Tidy."""
+    groups = {}
+    for r in rows:
+        if r["action"] in ("KEEP", "REVIEW") or not _unsub_links(r):
+            continue
+        name, addr = parseaddr(r["sender"])
+        key = (addr or r["sender"]).casefold()
+        entry = groups.setdefault(key, {"name": name or addr or r["sender"], "count": 0, "row": r})
+        entry["count"] += 1
+    if not groups:
+        return ""
+    top = sorted(groups.values(), key=lambda g: -g["count"])[:SENDERS_SHOWN]
+    items = "".join(f"<li>{escape(g['name'])} ({g['count']}): {_unsub_links(g['row'])}</li>" for g in top)
+    return (f'<section class="senders"><h2>Unsubscribe shortlist</h2><p>{len(groups)} bulk senders offer an unsubscribe '
+            f"link. Tidy never clicks these for you.</p><ol>{items}</ol></section>")
+
+
 def _unsub_line(r):
+    links = _unsub_links(r)
+    return f"<p>{links}</p>" if links else ""
+
+
+def _unsub_links(r):
     """A link the owner clicks themselves: Tidy never fetches or emails an unsubscribe link on its own."""
     links = r.get("unsubscribe")
     if not links:
@@ -101,7 +132,7 @@ def _unsub_line(r):
         parts.append(f'<a href="{escape(links["http"], quote=True)}" rel="noopener noreferrer" target="_blank">Unsubscribe link</a>')
     if (links.get("mailto") or "").lower().startswith("mailto:"):
         parts.append(f'<a href="{escape(links["mailto"], quote=True)}">Unsubscribe by email</a>')
-    return f"<p>{' / '.join(parts)}</p>" if parts else ""
+    return " / ".join(parts)
 
 
 def _row(r):

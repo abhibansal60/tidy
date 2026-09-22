@@ -9,7 +9,7 @@ from typesafe_sdk import ChoiceAnswer, SystemOneResponse, TypeSafeError, Usage
 from tidy import store
 from tidy.gmail import APIError
 from tidy.mail import (ACTION_FOR_CATEGORY, CATEGORIES, MailProposal, apply, classify, classify_batch,
-                       evidence_hash, gate_status, propose)
+                       evidence_hash, gate_status, propose, recheck, select_held)
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -97,6 +97,30 @@ class ProposeTests(unittest.TestCase):
 
         self.assertEqual(proposal.action, "REVIEW")
 
+    def test_updates_promos_split_with_no_reply_signal_archives_not_trashes(self):
+        split = {"Updates": 0.52, "Promos": 0.46, "Needs Reply": 0.01, "Spam": 0.01}
+        judgment = classify(FakeClient(answer(choice="Updates", confidence=0.45, probabilities=split)),
+                            message(list_unsubscribe=True), OWNER)
+
+        proposal = propose(judgment)
+
+        self.assertEqual(proposal.action, "ARCHIVE")
+        self.assertIn("bulk split", proposal.signals[0])
+
+    def test_split_with_some_needs_reply_mass_still_goes_to_review(self):
+        split = {"Updates": 0.55, "Promos": 0.36, "Needs Reply": 0.09}
+        judgment = classify(FakeClient(answer(choice="Updates", confidence=0.45, probabilities=split)),
+                            message(list_unsubscribe=True), OWNER)
+
+        self.assertEqual(propose(judgment).action, "REVIEW")
+
+    def test_bulk_split_still_needs_a_corroborating_signal(self):
+        split = {"Updates": 0.5, "Promos": 0.5}
+        judgment = classify(FakeClient(answer(choice="Promos", confidence=0.5, probabilities=split)),
+                            message(to=OWNER), OWNER)
+
+        self.assertEqual(propose(judgment).action, "REVIEW")
+
     def test_needs_reply_never_auto_actioned(self):
         judgment = classify(FakeClient(answer(choice="Needs Reply", confidence=0.99)), message(), OWNER)
 
@@ -112,11 +136,75 @@ class ProposeTests(unittest.TestCase):
         self.assertEqual(proposal.action, "REVIEW")
         self.assertIn("no independent corroborating signal", proposal.signals[-1])
 
+    def test_gmail_bulk_tab_counts_as_a_corroborating_signal(self):
+        judgment = classify(FakeClient(answer(choice="Updates", confidence=0.95)), message(to=OWNER), OWNER)
+
+        proposal = propose(judgment, ["INBOX", "CATEGORY_UPDATES"])
+
+        self.assertEqual(proposal.action, "ARCHIVE")
+        self.assertIn("Gmail tab", proposal.signals[-1])
+
     def test_archive_proceeds_with_a_corroborating_signal(self):
         judgment = classify(FakeClient(answer(choice="Updates", confidence=0.95)),
                             message(to=OWNER, list_unsubscribe=True), OWNER)
 
         self.assertEqual(propose(judgment).action, "ARCHIVE")
+
+
+class ProtectedLabelTests(unittest.TestCase):
+    def test_starred_mail_is_never_proposed_for_any_action(self):
+        for choice in ("Spam", "Promos", "Updates"):
+            judgment = classify(FakeClient(answer(choice=choice, confidence=0.99)), message(list_unsubscribe=True), OWNER)
+            proposal = propose(judgment, ["INBOX", "STARRED"])
+            self.assertEqual(proposal.action, "KEEP")
+            self.assertIn("owner-protected", proposal.signals[0])
+
+    def test_unstarred_labels_change_nothing(self):
+        judgment = classify(FakeClient(answer(choice="Spam", confidence=0.95)), message(), OWNER)
+        self.assertEqual(propose(judgment, ["INBOX", "CATEGORY_PROMOTIONS"]).action, "SPAM")
+
+
+class SelectHeldTests(unittest.TestCase):
+    def test_newest_run_decides_regardless_of_argument_order(self):
+        old = {"run_at": "2026-09-20T08:00:00+00:00", "rows": [{"id": "m1", "action": "TRASH"}]}
+        new = {"run_at": "2026-09-21T08:00:00+00:00", "rows": [{"id": "m1", "action": "KEEP"}]}
+
+        self.assertEqual(select_held([new, old], ["TRASH", "SPAM"]), [])
+
+    def test_applied_in_any_run_is_never_reapplied_without_force(self):
+        old = {"run_at": "2026-09-20", "rows": [{"id": "m1", "action": "TRASH", "outcome": "applied"}]}
+        new = {"run_at": "2026-09-21", "rows": [{"id": "m1", "action": "TRASH", "outcome": "held"}]}
+
+        self.assertEqual(select_held([old, new], ["TRASH"]), [])
+        self.assertEqual([r["id"] for r in select_held([old, new], ["TRASH"], force_reapply=True)], ["m1"])
+
+    def test_returns_the_row_objects_so_outcomes_can_be_recorded_in_place(self):
+        doc = {"rows": [{"id": "m1", "action": "SPAM"}]}
+
+        select_held([doc], ["SPAM"])[0]["outcome"] = "applied"
+
+        self.assertEqual(doc["rows"][0]["outcome"], "applied")
+
+
+class RecheckTests(unittest.TestCase):
+    def test_skips_messages_moved_or_starred_since_the_run(self):
+        api = Mock()
+        api.labels.side_effect = lambda i: {"m1": ["INBOX"], "m2": ["TRASH"], "m3": ["INBOX", "STARRED"]}[i]
+
+        valid, skipped = recheck(api, [("m1", "TRASH"), ("m2", "TRASH"), ("m3", "SPAM"), ("m4", "KEEP")])
+
+        self.assertEqual(valid, [("m1", "TRASH")])
+        self.assertEqual(skipped, {"m2": "skipped: no longer in inbox", "m3": "skipped: starred since the run"})
+        self.assertEqual(api.labels.call_count, 3)  # KEEP never rechecked, never applied
+
+    def test_failed_recheck_skips_rather_than_applies(self):
+        api = Mock()
+        api.labels.side_effect = APIError("404")
+
+        valid, skipped = recheck(api, [("m1", "TRASH")])
+
+        self.assertEqual(valid, [])
+        self.assertIn("could not recheck", skipped["m1"])
 
 
 def mock_api(calls=0, max_calls=10_000):

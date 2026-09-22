@@ -78,6 +78,26 @@ about 300 quota units of the 10,000 you get per day.
   See [ADR 0005](docs/adr/0005-gated-owner-started-autonomy.md).
 - Not affiliated with YouTube, Google or TypeSafe. Use at your own risk.
 
+## Gmail cleanup
+
+Same idea for an inbox: Jev sorts each email into Needs Reply, Updates, Promos, Sales or Spam, and code turns that
+into a proposal. Add `"mail_email"` to `.tidy/config.json`, then:
+
+```bash
+python -m tidy mail-auth                      # read-only Gmail token
+python -m tidy mail-auth --write              # separate label-change token (archive, trash, spam)
+python -m tidy mail-triage --execute --html dashboard.html --json runs/today.json   # classify only, no changes
+python -m tidy mail-triage --execute --apply --override-gate ...                    # also auto-archive bulk mail
+python -m tidy mail-act --run runs/*.json     # preview held Trash/Spam; add --execute to apply
+```
+
+- Only archiving runs automatically, and only when Jev's category is backed by a second, code-owned signal
+  (unsubscribe header, not personally addressed, or Gmail's own Updates/Promotions tab). Trash and Spam wait for `mail-act`.
+- Starred mail is never touched. `mail-act` rechecks each message live and skips anything already moved or starred.
+- Nothing is ever permanently deleted; Trash is recoverable for 30 days. Unsubscribe links are listed per sender on the
+  dashboard for you to click; Tidy never clicks them.
+- Judgments are cached by evidence hash, so rerunning on the same mail costs nothing.
+
 ## What we measured
 
 On 110 subscriptions, Jev was 21 to 48 times faster than seven frontier models run through their coding CLIs
