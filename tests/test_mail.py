@@ -1,10 +1,17 @@
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import Mock
 
 from typesafe_sdk import ChoiceAnswer, SystemOneResponse, TypeSafeError, Usage
 
+from tidy import store
 from tidy.gmail import APIError
-from tidy.mail import ACTION_FOR_CATEGORY, CATEGORIES, MailProposal, apply, classify, gate_status, propose
+from tidy.mail import (ACTION_FOR_CATEGORY, CATEGORIES, MailProposal, apply, classify, classify_batch,
+                       evidence_hash, gate_status, propose)
+
+NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
 def message(**overrides):
@@ -208,3 +215,61 @@ class GateStatusTests(unittest.TestCase):
         judgment = classify(FakeClient(answer(choice="Updates", confidence=0.9)),
                             message(list_unsubscribe=True), OWNER)
         self.assertEqual(propose(judgment).action, "ARCHIVE")
+
+
+class EvidenceHashTests(unittest.TestCase):
+    def test_same_message_and_owner_hash_the_same(self):
+        self.assertEqual(evidence_hash(message(), OWNER), evidence_hash(message(), OWNER))
+
+    def test_different_snippet_hashes_differently(self):
+        self.assertNotEqual(evidence_hash(message(), OWNER), evidence_hash(message(snippet="other"), OWNER))
+
+    def test_different_owner_hashes_differently(self):
+        self.assertNotEqual(evidence_hash(message(to=OWNER), OWNER),
+                            evidence_hash(message(to=OWNER), "someone.else@example.com"))
+
+
+class ClassifyBatchCachedTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.db = store.connect(Path(self.temp.name) / "inventory.sqlite3")
+
+    def tearDown(self):
+        self.db.close()
+        self.temp.cleanup()
+
+    def test_unchanged_evidence_costs_no_second_call(self):
+        client = FakeClient()
+
+        first = classify_batch(client, [message()], OWNER, db=self.db, now=NOW)
+        again = classify_batch(client, [message()], OWNER, db=self.db, now=NOW)
+
+        self.assertEqual(client.system_one.call_count, 1)
+        self.assertEqual(again["m1"], first["m1"])
+
+    def test_changed_message_or_expiry_triggers_a_new_call(self):
+        client = FakeClient()
+        classify_batch(client, [message()], OWNER, db=self.db, now=NOW)
+
+        classify_batch(client, [message(snippet="different")], OWNER, db=self.db, now=NOW)
+        self.assertEqual(client.system_one.call_count, 2)
+
+        classify_batch(client, [message()], OWNER, db=self.db, now=NOW + timedelta(days=31))
+        self.assertEqual(client.system_one.call_count, 3)
+
+    def test_without_db_never_caches(self):
+        client = FakeClient()
+
+        classify_batch(client, [message()], OWNER, db=None, now=NOW)
+        classify_batch(client, [message()], OWNER, db=None, now=NOW)
+
+        self.assertEqual(client.system_one.call_count, 2)
+
+    def test_error_outcome_is_not_cached(self):
+        client = Mock()
+        client.system_one.side_effect = TypeSafeError("rate limited")
+
+        classify_batch(client, [message()], OWNER, db=self.db, now=NOW)
+        classify_batch(client, [message()], OWNER, db=self.db, now=NOW)
+
+        self.assertEqual(client.system_one.call_count, 2)

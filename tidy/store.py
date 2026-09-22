@@ -47,7 +47,7 @@ def connect(path):
     db.row_factory = sqlite3.Row
     db.execute("PRAGMA foreign_keys=ON")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version not in (0, 1, 2, 3, 4, 5, 6, 7):
+    if version not in (0, 1, 2, 3, 4, 5, 6, 7, 8):
         db.close()
         raise ValueError("Database schema is newer than this application.")
     if version == 0:
@@ -170,6 +170,19 @@ def connect(path):
             PRAGMA user_version=7;
             COMMIT;
         """)
+    if version < 8:
+        # Mail judgments cached by evidence hash (ADR 0004), same shape as `judgments` above; expire with
+        # the same 30-day retention as other API-derived data (AGENTS.md).
+        db.executescript("""
+            BEGIN;
+            CREATE TABLE mail_judgments (
+                message_id TEXT NOT NULL, evidence_hash TEXT NOT NULL, schema_id TEXT NOT NULL,
+                judged_at TEXT NOT NULL, expires_at TEXT NOT NULL, payload TEXT NOT NULL,
+                PRIMARY KEY (message_id, evidence_hash, schema_id)
+            );
+            PRAGMA user_version=8;
+            COMMIT;
+        """)
     # API metadata is a refreshable cache, not a permanent historical archive.
     cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     with db:
@@ -281,6 +294,7 @@ def purge(db, now=None):
         db.execute("UPDATE unsubscribes SET title='(expired)' WHERE approved_at <= ? AND title<>'(expired)'", (cutoff,))
         db.execute("DELETE FROM judgments WHERE expires_at <= ?", (stamp,))
         db.execute("DELETE FROM second_opinions WHERE expires_at <= ?", (stamp,))
+        db.execute("DELETE FROM mail_judgments WHERE expires_at <= ?", (stamp,))
         return db.execute("DELETE FROM evidence_samples WHERE expires_at <= ?", (stamp,)).rowcount
 
 
@@ -298,6 +312,22 @@ def get_judgment(db, evidence_hash, schema_id, interests_key, now=None):
     row = db.execute("SELECT payload FROM judgments WHERE evidence_hash=? AND schema_id=? AND interests_key=? "
                      "AND expires_at > ?", (evidence_hash, schema_id, interests_key, stamp)).fetchone()
     return Judgment(**json.loads(row["payload"])) if row else None
+
+
+def put_mail_judgment(db, judgment, evidence_hash, schema_id, expires_at):
+    from dataclasses import asdict
+    with db:
+        db.execute("INSERT OR REPLACE INTO mail_judgments VALUES (?, ?, ?, ?, ?, ?)",
+                   (judgment.message_id, evidence_hash, schema_id, judgment.judged_at, expires_at,
+                    json.dumps(asdict(judgment))))
+
+
+def get_mail_judgment(db, message_id, evidence_hash, schema_id, now=None):
+    from .mail import MailJudgment  # mail imports nothing from here; kept lazy like get_judgment
+    stamp = (now or datetime.now(timezone.utc)).isoformat()
+    row = db.execute("SELECT payload FROM mail_judgments WHERE message_id=? AND evidence_hash=? AND schema_id=? "
+                     "AND expires_at > ?", (message_id, evidence_hash, schema_id, stamp)).fetchone()
+    return MailJudgment(**json.loads(row["payload"])) if row else None
 
 
 def put_second_opinion(db, channel_id, evidence_hash, model, answers, expires_at):

@@ -254,7 +254,7 @@ def main(argv=None):
                     messages = [parse_message(api.message(i)) for i in api.message_ids(args.query, args.limit)]
                 gmail_save_credentials(token_path, credentials)
                 with experiment.typesafe_client() as client:
-                    judgments = {m["id"]: mail.classify(client, m, email) for m in messages}
+                    judgments = mail.classify_batch(client, messages, email, db=db)
                 proposals = {i: mail.propose(j) for i, j in judgments.items() if not isinstance(j, str)}
                 if args.cap_archive < 0:
                     raise ValueError("--cap-archive must not be negative.")

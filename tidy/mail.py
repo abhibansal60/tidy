@@ -5,12 +5,18 @@ proposal (archive, spam, ...) is a separate gated step, same shape as `tidy/muta
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.utils import getaddresses
+import hashlib
+import json
 
 from typesafe_sdk import Choice, TypeSafeError
 
+from . import store
 from .gmail import APIError
+
+SCHEMA_ID = "mail-v1"  # bump if QUESTIONS/_state change, so stale cached judgments never get reused
+RETENTION_DAYS = 30  # same API-derived-data retention as the YouTube side (AGENTS.md)
 
 CATEGORIES = {
     "Needs Reply": "A person is personally asking the owner something or waiting on a reply from them.",
@@ -83,6 +89,31 @@ def classify(client, message, owner_email):
                         dict(answer.probabilities),
                         {"input_tokens": reply.usage.input_tokens, "output_tokens": reply.usage.output_tokens},
                         datetime.now(timezone.utc).isoformat(), state["facts"])
+
+
+def evidence_hash(message, owner_email):
+    """Hash of the exact state sent to Jev: changes if the message content, code-owned facts, or owner
+    changes, so a cached judgment never survives evidence it wasn't actually judged from (ADR 0004)."""
+    return hashlib.sha256(json.dumps(_state(message, owner_email), sort_keys=True).encode()).hexdigest()
+
+
+def classify_batch(client, messages, owner_email, db=None, now=None):
+    """`classify()` for each message, reusing a cached judgment for identical evidence instead of a fresh
+    Jev call. Returns {message_id: MailJudgment | error string}, same shape as calling `classify()` per message."""
+    now = now or datetime.now(timezone.utc)
+    expires_at = (now + timedelta(days=RETENTION_DAYS)).isoformat()
+    results = {}
+    for message in messages:
+        h = evidence_hash(message, owner_email)
+        cached = db and store.get_mail_judgment(db, message["id"], h, SCHEMA_ID, now)
+        if cached:
+            results[message["id"]] = cached
+            continue
+        outcome = classify(client, message, owner_email)
+        if db and not isinstance(outcome, str):
+            store.put_mail_judgment(db, outcome, h, SCHEMA_ID, expires_at)
+        results[message["id"]] = outcome
+    return results
 
 
 def _state(message, owner_email):
