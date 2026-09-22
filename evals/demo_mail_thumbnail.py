@@ -98,7 +98,36 @@ def d(unread=12158):
     return img
 
 
-VARIANTS = {"a": a, "b": b, "c": c, "d": d}
+def _checkmark(d, cx, cy, r, color, width=8):
+    d.line((cx - r * 0.5, cy, cx - r * 0.1, cy + r * 0.4), fill=color, width=width)
+    d.line((cx - r * 0.1, cy + r * 0.4, cx + r * 0.55, cy - r * 0.35), fill=color, width=width)
+
+
+def e(unread=12158):
+    """Before/after split (b) with the recognizable notification-badge icon (c) on each side."""
+    img, d = _bg()
+    mid = W // 2
+    d.line((mid, 60, mid, 430), fill=(48, 54, 61), width=2)
+    left_cx, right_cx = mid // 2, mid + mid // 2
+    d.text((left_cx, 80), "BEFORE", font=f(SEMIBOLD, 28), fill=DIM, anchor="mm")
+    d.text((right_cx, 80), "AFTER", font=f(SEMIBOLD, 28), fill=DIM, anchor="mm")
+    _envelope(d, left_cx, 280, 95, INK, width=6)
+    bx, by, br = left_cx + 92, 280 - 65, 52
+    d.ellipse((bx - br, by - br, bx + br, by + br), fill=RED)
+    d.text((bx, by - 2), "12K+", font=f(BLACK, 30), fill=(255, 255, 255), anchor="mm")
+    d.text((left_cx, 400), f"{unread:,} unread", font=f(EXBOLD, 32), fill=INK, anchor="mm")
+    _envelope(d, right_cx, 280, 95, JEV, width=6)
+    bx2 = right_cx + 92
+    d.ellipse((bx2 - br, by - br, bx2 + br, by + br), fill=JEV)
+    _checkmark(d, bx2, by, br * 0.7, (8, 12, 10), width=9)
+    d.text((right_cx, 400), "sorted, 45¢", font=f(EXBOLD, 32), fill=JEV, anchor="mm")
+    d.polygon([(mid - 26, 280 - 12), (mid + 26, 280), (mid - 26, 280 + 12)], fill=(80, 88, 98))
+    d.text((W // 2, 470), "I let AI clean this up", font=f(EXBOLD, 46), fill=INK, anchor="mm")
+    d.text((W // 2, 650), "built on Jev · written with Claude · reviewed with Codex", font=f(REGULAR, 22), fill=DIM, anchor="mm")
+    return img
+
+
+VARIANTS = {"a": a, "b": b, "c": c, "d": d, "e": e}
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
