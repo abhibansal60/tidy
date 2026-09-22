@@ -3,8 +3,6 @@
 from datetime import datetime, timezone
 from itertools import combinations
 import json
-import os
-from pathlib import Path
 import time
 
 from . import judge as jev, store
@@ -20,18 +18,13 @@ def plan(db, schema_ids, interests, now=None, habits=""):
             "estimated_input_tokens": chars // 4, "executes": False}
 
 
-def typesafe_client():
-    """Real client; key from TYPESAFE_API_KEY, else .env in the cwd, else ../.env. The key is never printed."""
+def typesafe_client(data_dir=None):
+    """Real client; key from TYPESAFE_API_KEY, else <data dir>/.env, ./.env or ../.env. The key is never printed."""
     from typesafe_sdk import TypeSafeClient
-    key = os.environ.get("TYPESAFE_API_KEY")
-    for env in (Path.cwd() / ".env", Path.cwd().parent / ".env"):
-        if not key and env.is_file():
-            for line in env.read_text().splitlines():
-                name, _, value = line.partition("=")
-                if name.strip() == "TYPESAFE_API_KEY":
-                    key = value.strip().strip("\"'")
+    from .setup_check import data_dir as default_dir, typesafe_key
+    key, _ = typesafe_key(data_dir or default_dir())
     if not key:
-        raise ValueError("TYPESAFE_API_KEY not set (environment, ./.env or ../.env).")
+        raise ValueError("TYPESAFE_API_KEY not found. Get one at https://console.typesafe.ai, then: tidy init --email ... --key-stdin")
     return TypeSafeClient(api_key=key)
 
 

@@ -1,6 +1,7 @@
 import argparse
 from dataclasses import asdict
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -9,7 +10,7 @@ from google.auth.exceptions import GoogleAuthError
 from oauthlib.oauth2 import OAuth2Error
 import requests
 
-from . import discovery, escalate, experiment, judge, mail, mail_report_html, mutate, pilot, profile, report_html, review, store
+from . import __version__, discovery, escalate, experiment, judge, mail, mail_report_html, mutate, pilot, profile, report_html, review, setup_check, store
 from .gmail import Gmail, parse_list_unsubscribe, parse_message
 from .gmail import APIError as GmailAPIError
 from .gmail import authorize as gmail_authorize
@@ -52,14 +53,26 @@ def run_act(db, api, email, args, config):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="Tidy: YouTube subscription manager; unsubscribes only for owner-approved subscriptions.")
-    parser.add_argument("--data-dir", type=Path, default=Path(".tidy"))
-    commands = parser.add_subparsers(dest="command", required=True)
+    parser = argparse.ArgumentParser(
+        prog="tidy", description="Tidy: Jev judges your YouTube subscriptions and Gmail inbox; code sets the limits; you approve. "
+        "Every command prints JSON. Anything that changes your account is a dry run until you add --execute.",
+        epilog="Start here: tidy init --email you@gmail.com --client-secrets PATH, then tidy doctor.")
+    parser.add_argument("--version", action="version", version=f"tidy {__version__}")
+    parser.add_argument("--data-dir", type=Path, default=None,
+                        help="Private data folder (default: $TIDY_DATA_DIR, else ./.tidy if present, else ~/.tidy)")
+    commands = parser.add_subparsers(dest="command", required=True, metavar="COMMAND")
+    first = commands.add_parser("init", help="First-run setup: private data folder, config, OAuth client, TypeSafe key")
+    first.add_argument("--email", required=True, help="The Google account you will sign in with")
+    first.add_argument("--client-secrets", type=Path, help="Google Desktop OAuth client JSON to copy in (stored 0600)")
+    first.add_argument("--key-stdin", action="store_true", help="Read the TypeSafe API key from stdin (never echoed)")
+    first.add_argument("--no-mail", action="store_true", help="Do not set up Gmail (mail_email)")
+    check = commands.add_parser("doctor", help="Offline: what is set up, what is missing, and the next command (never prints secrets)")
+    check.add_argument("--client-secrets", type=Path, default=None)
     legacy = commands.add_parser("import-legacy", help="Import local Claude artifacts without network calls")
     legacy.add_argument("--csv", type=Path, default=Path("yt/subscriptions.csv"))
     legacy.add_argument("--results", type=Path, default=Path("results.json"))
     auth = commands.add_parser("auth", help="Authorize read-only YouTube and verify configured Google email")
-    auth.add_argument("--client-secrets", type=Path, default=Path("secrets/client_secret.json"))
+    auth.add_argument("--client-secrets", type=Path, default=None, help="Default: <data dir>/client_secret.json, else secrets/client_secret.json")
     auth.add_argument("--no-browser", action="store_true")
     auth.add_argument("--write", action="store_true", help="Authorize YouTube write access into a separate token")
     live = commands.add_parser("sync", help="Fetch all live subscriptions, then atomically update inventory")
@@ -113,7 +126,7 @@ def main(argv=None):
     act.add_argument("--execute", action="store_true")
     act.add_argument("--max-units", type=int, default=500)
     mail_auth = commands.add_parser("mail-auth", help="Authorize Gmail and verify configured Google email")
-    mail_auth.add_argument("--client-secrets", type=Path, default=Path("secrets/client_secret.json"))
+    mail_auth.add_argument("--client-secrets", type=Path, default=None, help="Default: <data dir>/client_secret.json, else secrets/client_secret.json")
     mail_auth.add_argument("--no-browser", action="store_true")
     mail_auth.add_argument("--write", action="store_true", help="Authorize label-write access (archive, spam) into a separate token")
     mail_triage = commands.add_parser("mail-triage", help="Jev classifies recent inbox mail; dry run by default. --apply archives/spams (label-only, never deletes).")
@@ -137,8 +150,20 @@ def main(argv=None):
     resub.add_argument("--execute", action="store_true")
     resub.add_argument("--max-units", type=int, default=500)
     args = parser.parse_args(argv)
+    args.data_dir = setup_check.data_dir(args.data_dir)
     if args.data_dir == Path(".tidy"):
         store.adopt_old_dir(args.data_dir, Path(".jev"))
+    if hasattr(args, "client_secrets") and args.command != "init":
+        args.client_secrets = setup_check.client_secrets(args.data_dir, args.client_secrets)
+    if args.command in ("init", "doctor"):  # no database, no network
+        try:
+            output = (setup_check.init(args.data_dir, args.email, args.client_secrets, args.key_stdin, not args.no_mail)
+                      if args.command == "init" else setup_check.doctor(args.data_dir, args.client_secrets))
+        except (OSError, ValueError) as error:
+            print(f"Error: {error if isinstance(error, ValueError) else type(error).__name__}", file=sys.stderr)
+            return 1
+        print(json.dumps(output, indent=2))
+        return 0
     db = None
     try:
         db = store.connect(args.data_dir / "inventory.sqlite3")
@@ -155,11 +180,11 @@ def main(argv=None):
             config = profile.load(args.data_dir / "profile.json")
             proposals, judgments, samples = review.derive(db, config)
             if args.json:
-                args.json.write_text(json.dumps([asdict(p) for p in proposals], indent=1), encoding="utf-8")
+                store.private_text(args.json, json.dumps([asdict(p) for p in proposals], indent=1))
                 output = {"json": str(args.json), "channels": len(proposals)}
             elif args.html:
                 gate = review.gate_status(review.agreement(db, proposals), config)
-                args.html.write_text(report_html.render(proposals, judgments, samples, review.current_labels(db), gate, str(args.data_dir)), encoding="utf-8")
+                store.private_text(args.html, report_html.render(proposals, judgments, samples, review.current_labels(db), gate, str(args.data_dir)))
                 output = {"html": str(args.html), "channels": len(proposals)}
             else:
                 print(review.render_report(proposals, judgments, samples, review.current_labels(db)))
@@ -187,14 +212,15 @@ def main(argv=None):
             if not args.execute:
                 output = experiment.plan(db, args.schemas, interests, habits=habits)
             else:
-                with experiment.typesafe_client() as client:
+                with experiment.typesafe_client(args.data_dir) as client:
                     output = experiment.run(db, client, args.schemas, interests, habits=habits)
         elif args.command == "unsubscribe" and not args.execute:
             output = mutate.unsubscribe(db, None, None, False)
         elif args.command in ("act", "resubscribe") and not args.execute:
             output = run_act(db, None, None, args, profile.load(args.data_dir / "profile.json"))
         elif args.command == "mail-triage" and not args.execute:
-            output = {"query": args.query, "limit": args.limit, "executes": False}
+            output = {"query": args.query, "limit": args.limit, "executes": False,
+                      "hint": "Dry run: nothing read or sent. Add --execute to classify (reads Gmail, calls Jev, changes nothing)."}
         elif args.command == "mail-act":
             # Several run files are allowed (the daily cron writes one per day); see mail.select_held. Files are rewritten in place.
             docs = [(path, json.loads(path.read_text())) for path in args.run]
@@ -207,7 +233,7 @@ def main(argv=None):
             else:
                 config_file = args.data_dir / "config.json"
                 if not config_file.is_file():
-                    raise ValueError("Create private config.json from config.example.json; see README.")
+                    raise ValueError("Not set up yet. Run: tidy init --email you@gmail.com (then tidy doctor).")
                 config = json.loads(config_file.read_text())
                 email = store.required_text(config.get("mail_email"), "mail_email")
                 write_token_path = args.data_dir / "token_mail_write.json"
@@ -226,7 +252,7 @@ def main(argv=None):
                     if r["id"] in outcomes:
                         r["outcome"] = outcomes[r["id"]]
                 for path, doc in docs:
-                    path.write_text(json.dumps(doc, indent=1), encoding="utf-8")
+                    store.private_text(path, json.dumps(doc, indent=1))
                 output = {"run": [str(p) for p in args.run], "actions": args.actions,
                           "applied": sum(v == "applied" for v in outcomes.values()),
                           "skipped": {i: v for i, v in outcomes.items() if v.startswith("skipped")},
@@ -234,7 +260,7 @@ def main(argv=None):
         elif args.command in ("mail-auth", "mail-triage"):
             config_file = args.data_dir / "config.json"
             if not config_file.is_file():
-                raise ValueError("Create private config.json from config.example.json; see README.")
+                raise ValueError("Not set up yet. Run: tidy init --email you@gmail.com (then tidy doctor).")
             config = json.loads(config_file.read_text())
             if not isinstance(config, dict):
                 raise ValueError("Private config.json must be an object.")
@@ -242,7 +268,7 @@ def main(argv=None):
             if args.command == "mail-auth":
                 token_path = args.data_dir / ("token_mail_write.json" if args.write else "token_mail.json")
                 if not args.client_secrets.is_file():
-                    raise ValueError("Google Desktop OAuth client JSON missing; see README setup steps.")
+                    raise ValueError(f"Google OAuth client JSON not found at {args.client_secrets}. Run: tidy init --email ... --client-secrets PATH")
                 credentials = gmail_authorize(args.client_secrets, email, not args.no_browser, args.write)
                 with gmail_session_for(credentials) as session:
                     identity = Gmail(session).identity(email)
@@ -260,7 +286,7 @@ def main(argv=None):
                     api.identity(email)
                     messages = [parse_message(api.message(i)) for i in api.message_ids(args.query, args.limit)]
                 gmail_save_credentials(token_path, credentials)
-                with experiment.typesafe_client() as client:
+                with experiment.typesafe_client(args.data_dir) as client:
                     judgments = mail.classify_batch(client, messages, email, db=db)
                 by_id = {m["id"]: m for m in messages}
                 proposals = {i: mail.propose(j, by_id[i]["label_ids"]) for i, j in judgments.items() if not isinstance(j, str)}
@@ -294,9 +320,9 @@ def main(argv=None):
                                         if by_id[i]["list_unsubscribe"] else None)}
                         for i, p in proposals.items()]
                 if args.html:
-                    args.html.write_text(mail_report_html.render(rows, applied=args.apply), encoding="utf-8")
+                    store.private_text(args.html, mail_report_html.render(rows, applied=args.apply))
                 if args.json:
-                    args.json.write_text(json.dumps({"run_at": store.now(), "query": args.query, "rows": rows, "errors": {i: j for i, j in judgments.items() if isinstance(j, str)}}, indent=1), encoding="utf-8")
+                    store.private_text(args.json, json.dumps({"run_at": store.now(), "query": args.query, "rows": rows, "errors": {i: j for i, j in judgments.items() if isinstance(j, str)}}, indent=1))
                 mutation_errors = {i: v for i, v in outcomes.items() if v != "applied"}
                 output = {"messages": len(messages), "errors": {i: j for i, j in judgments.items() if isinstance(j, str)},
                           "applied": args.apply, "gate": gate, "gate_overridden": args.apply and not gate["open"] and args.override_gate,
@@ -307,7 +333,7 @@ def main(argv=None):
         else:
             config_file = args.data_dir / "config.json"
             if not config_file.is_file():
-                raise ValueError("Create private config.json from config.example.json; see README.")
+                raise ValueError("Not set up yet. Run: tidy init --email you@gmail.com (then tidy doctor).")
             config = json.loads(config_file.read_text())
             if not isinstance(config, dict):
                 raise ValueError("Private config.json must be an object.")
@@ -316,7 +342,7 @@ def main(argv=None):
             token_path = args.data_dir / ("token_write.json" if write else "token.json")
             if args.command == "auth":
                 if not args.client_secrets.is_file():
-                    raise ValueError("Google Desktop OAuth client JSON missing; see README setup steps.")
+                    raise ValueError(f"Google OAuth client JSON not found at {args.client_secrets}. Run: tidy init --email ... --client-secrets PATH")
                 credentials = authorize(args.client_secrets, email, not args.no_browser, write)
                 with session_for(credentials) as session:
                     api = YouTube(session)
@@ -352,7 +378,18 @@ def main(argv=None):
     except (OSError, ValueError, sqlite3.Error, APIError, GmailAPIError) as error:
         # Avoid traceback/HTTP bodies, which can expose OAuth callbacks or credentials.
         message = str(error) if isinstance(error, (ValueError, APIError, GmailAPIError)) else type(error).__name__
+        if isinstance(error, OSError) and error.filename:  # a path the user typed, never file contents
+            message = f"{error.strerror or type(error).__name__}: {error.filename}"
         print(f"Error: {message}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("Interrupted. Anything already applied is recorded; rerun to continue.", file=sys.stderr)
+        return 130
+    except Exception as error:  # never a raw traceback: it can carry request URLs or token-bearing reprs
+        if os.environ.get("TIDY_DEBUG"):
+            raise
+        print(f"Unexpected error ({type(error).__name__}). Rerun with TIDY_DEBUG=1 for details, and check the "
+              "output before sharing it: it may include private data.", file=sys.stderr)
         return 1
     finally:
         if db is not None:

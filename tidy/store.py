@@ -16,13 +16,18 @@ def now():
 
 
 def private_json(path, value):
+    private_text(path, json.dumps(value, indent=2) + "\n")
+
+
+def private_text(path, text):
+    """Atomic write readable only by the owner (0600): tokens, reports, run files. Reports and run files hold
+    subjects, senders and channel lists, so they get the same treatment as credentials."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, temporary = tempfile.mkstemp(dir=path.parent)
     try:
-        with os.fdopen(fd, "w") as file:
-            json.dump(value, file, indent=2)
-            file.write("\n")
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            file.write(text)
             file.flush()
             os.fsync(file.fileno())
         os.replace(temporary, path)

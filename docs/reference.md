@@ -13,13 +13,13 @@ subscriptions without your approval, and every command that could is a dry run u
 
 ## Getting started (long form)
 
-You need Python 3.14, a Google Cloud project with the YouTube Data API v3 and a Desktop OAuth client, a TypeSafe API
+You need Python 3.11+, a Google Cloud project with the YouTube Data API v3 and a Desktop OAuth client, a TypeSafe API
 key, and (recommended) your Google Takeout watch history.
 
-1. **Install.** See "Run locally" below.
-2. **Configure.** Put the OAuth client JSON at `secrets/client_secret.json`, create `.tidy/config.json` with your
-   `expected_email` (copy `config.example.json`), and set `TYPESAFE_API_KEY` in the environment or `../.env`.
-   Details are in "Connect YouTube".
+1. **Install.** `pipx install tidy-ai`, or see "Run locally" below for a checkout.
+2. **Configure.** `tidy init --email you@gmail.com --client-secrets PATH --key-stdin`, then `tidy doctor`. This writes
+   `config.json`, `client_secret.json` and `.env` (owner-only) into the data folder. A checkout can instead keep the
+   client at `secrets/client_secret.json` and the key in `TYPESAFE_API_KEY`, `./.env` or `../.env`.
 3. **Authorize.** `python -m tidy auth` (read-only). Only when you want it to make changes: `python -m tidy auth --write`.
 4. **Add your taste.** Export your YouTube watch history from Google Takeout as HTML, save it under `data/`, and set
    `watch_history_path` and a short `viewing_habits` description in `.tidy/profile.json`.
@@ -57,7 +57,7 @@ the calibration gate, owner-started runs only). See `docs/adr/0005-gated-owner-s
 
 ## Run locally
 
-Tested with Python 3.14.7. Use the existing `.venv`, or create one and install the
+Tested on Python 3.11 to 3.14 (CI). Use the existing `.venv`, or create one and install the
 pinned environment:
 
 ```bash
@@ -67,8 +67,8 @@ python3 -m venv .venv
 .venv/bin/python -m tidy --help
 ```
 
-The application runs from the project directory. SQLite, OAuth credentials, and
-local configuration live under `.tidy/` by default. `--data-dir` selects a separate
+SQLite, OAuth credentials, and local configuration live in the data folder: `--data-dir`, else `$TIDY_DATA_DIR`,
+else `./.tidy` when it exists (a checkout), else `~/.tidy`. `--data-dir` selects a separate
 account's state and must precede the command. The account is bound to both the
 verified Google subject/email and the authorized YouTube channel ID.
 

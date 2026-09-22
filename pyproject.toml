@@ -1,23 +1,51 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tidy"
-version = "0.1.0"
-description = "Keeps a YouTube subscription list current: Jev judges, code sets the limits, you approve."
+name = "tidy-ai"
+dynamic = ["version"]
+description = "Clean up your YouTube subscriptions and Gmail inbox with Jev: an AI judges, plain code sets the limits, you approve."
 readme = "README.md"
-license = { file = "LICENSE" }
-requires-python = ">=3.14"  # tested on 3.14 only
-dependencies = [
-    "google-auth>=2.58",
-    "google-auth-oauthlib>=1.4",
-    "requests>=2.34",
-    "typesafe-sdk>=0.7",
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Abhinav Bansal" }]
+requires-python = ">=3.11"
+keywords = ["gmail", "inbox-zero", "email-cleanup", "youtube-subscriptions", "jev", "typesafe", "ai-agents", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Communications :: Email",
+    "Topic :: Utilities",
 ]
+dependencies = [
+    "google-auth>=2.40,<3",
+    "google-auth-oauthlib>=1.2,<2",
+    "requests>=2.32.4,<3",  # CVE-2024-35195, CVE-2024-47081
+    "typesafe-sdk>=0.7,<1",
+]
+
+[project.urls]
+Homepage = "https://github.com/abhibansal60/tidy"
+Documentation = "https://github.com/abhibansal60/tidy#readme"
+Issues = "https://github.com/abhibansal60/tidy/issues"
+Security = "https://github.com/abhibansal60/tidy/blob/main/SECURITY.md"
+Changelog = "https://github.com/abhibansal60/tidy/blob/main/CHANGELOG.md"
 
 [project.scripts]
 tidy = "tidy.__main__:main"
+tidy-ai = "tidy.__main__:main"
 
 [tool.setuptools]
 packages = ["tidy"]
+
+[tool.setuptools.dynamic]
+version = { attr = "tidy.__version__" }

@@ -17,7 +17,12 @@ is not tracked. It does not override the decisions below.
 - Current scope: subscription inventory, read-only evidence collection with a 30-day
   retention limit, Jev judgments, review and labeling, owner-approved unsubscribes,
   gated automatic actions (closed by default) and watch-history discovery. See
-  docs/adr/0005 and README.md.
+  docs/adr/0005 and README.md. Gmail cleanup (`mail-*` commands) follows the same rules:
+  read and `gmail.modify` tokens are separate, only corroborated ARCHIVE auto-applies (and only with
+  `--override-gate` until a mail gate exists), TRASH/SPAM wait for `mail-act` with a live recheck, starred
+  mail is never touched, and nothing ever requests a scope that can permanently delete mail.
+- Published to PyPI as `tidy-ai` (commands `tidy` and `tidy-ai`). Data defaults to `~/.tidy` outside a
+  checkout (see `tidy/setup_check.py`). Everything written to the data folder or as a report is 0600.
 - Jev supplies typed judgments. Code owns arithmetic, dates, persistence, policy,
   and side effects. Preserve raw answers and evidence provenance in future work.
 - Vocabulary is in `CONTEXT.md`; reasons for the big decisions are in `docs/adr/`.

@@ -9,8 +9,8 @@ DIR="${TIDY_DIR:-tidy}"
 for tool in git python3; do
   command -v "$tool" >/dev/null 2>&1 || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
-python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 14) else 1)' ||
-  { echo "Tidy needs Python 3.14 or newer; found $(python3 -V 2>&1)." >&2; exit 1; }
+python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" ||
+  { echo "Tidy needs Python 3.11 or newer; found $(python3 -V 2>&1)." >&2; exit 1; }
 
 if [ -d "$DIR/.git" ]; then
   git -C "$DIR" pull --ff-only
@@ -26,6 +26,6 @@ python3 -m venv .venv
 cat <<MSG
 
 Tidy is installed in $(pwd).
-Next: follow docs/agent-setup.md (or the README quick start). You will need a Google OAuth client
-(secrets/client_secret.json) and a TypeSafe API key (.env). Try:  .venv/bin/tidy --help
+Next: .venv/bin/tidy init --email you@gmail.com --client-secrets PATH --key-stdin, then .venv/bin/tidy doctor.
+The simpler install is: pipx install tidy-ai. Setup guide: docs/agent-setup.md
 MSG
