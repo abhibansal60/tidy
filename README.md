@@ -1,5 +1,7 @@
 # Tidy
 
+<img src="https://raw.githubusercontent.com/abhibansal60/tidy/main/docs/assets/brand/tidy-lockup-light.png" alt="Tidy: inbox zero, safely" width="560">
+
 **Clean up your Gmail inbox and your YouTube subscriptions with AI, without letting AI loose on your account.**
 
 [Jev](https://docs.typesafe.ai) reads each email or channel and gives a typed verdict in well under a second. Plain,
@@ -18,7 +20,7 @@ tested code decides what that verdict is allowed to do, and nothing risky happen
 | **Does on its own** | archives bulk mail, only when a second signal agrees | nothing: every change waits for you |
 | **Waits for you** | Trash and Spam, reviewed from a dashboard | unsubscribes and new subscriptions |
 | **Never does** | permanently delete anything, touch starred mail, click unsubscribe links | use browser automation or scrape |
-| **Measured cost** | $0.43 to sort 12,158 unread emails | a fraction of a cent for 110 channels |
+| **Cost** | about $0.43 for 12,158 emails (measured per-email price) | a fraction of a cent for 110 channels |
 
 [Mail demo video (MP4)](https://github.com/abhibansal60/tidy/raw/main/docs/assets/tidy_mail_demo.mp4) ·
 [YouTube demo video (MP4)](https://github.com/abhibansal60/tidy/raw/main/docs/assets/tidy_demo.mp4) ·
