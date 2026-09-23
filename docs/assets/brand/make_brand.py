@@ -73,6 +73,16 @@ FILES = {
         + text(110, 600, 40, 600, MINT, "About 45 cents to sort 12,158 emails")
         + f'<rect x="110" y="680" width="620" height="96" rx="20" fill="#1A2A24" stroke="{MINT}" stroke-width="3"/>'
         + text(140, 742, 40, 700, "#F5F7FA", "$ pipx install tidy-ai", mono=True)),
+    "tidy-launch-card-builder": (1600, 900, f'<rect width="1600" height="900" fill="{NIGHT}"/>' + place(BRAND, 990, 210, 1.0)
+        + text(110, 210, 76, 900, "#F5F7FA", "AI reads it.")
+        + text(110, 300, 76, 900, MINT, "Code decides.")
+        + text(110, 380, 32, 600, "#B7C2BC", "The AI in Tidy never touches your account.")
+        + text(110, 422, 32, 600, "#B7C2BC", "Plain code does that, with caps and a live recheck.")
+        + text(110, 500, 30, 700, "#F5F7FA", "Gmail cleanup  \u00b7  YouTube subscriptions  \u00b7  MIT licensed")
+        + text(110, 545, 30, 700, "#F5F7FA", "Open source, security-reviewed, Python 3.11 to 3.14")
+        + f'<rect x="110" y="640" width="660" height="100" rx="20" fill="#1A2A24" stroke="{MINT}" stroke-width="3"/>'
+        + text(140, 704, 42, 700, "#F5F7FA", "$ pipx install tidy-ai", mono=True)
+        + text(110, 800, 28, 600, "#7C8983", "github.com/abhibansal60/tidy")),
 }
 
 
