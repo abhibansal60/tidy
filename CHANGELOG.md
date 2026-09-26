@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.1 (2026-09-26)
+
+- **Fix:** watch history from Google Takeout in day-first locales (India, UK: `22 Sept 2026, 14:49:34 IST`) was read
+  as zero watches, so every channel looked unwatched. Both US and day-first formats are now parsed.
+- **Fix:** a key-lookup test could read the real `~/.tidy/.env` and print that key in its failure message; it now uses
+  an isolated data folder.
+- `escalate` defaults to `claude-opus-5-5`.
+- Tidy mascot and brand kit (mail and subscriptions costumes, generator script), lockup in README header.
+- Builder-angle launch card: AI reads it, code decides.
+
 ## 0.2.0 (2026-09-22)
 
 First PyPI release, as `tidy-ai`.

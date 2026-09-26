@@ -45,6 +45,8 @@ class KeyLookupTests(unittest.TestCase):
     def test_typesafe_key_is_read_from_a_dotenv_in_the_working_directory(self):
         with tempfile.TemporaryDirectory() as d, patch.dict(os.environ, {}, clear=False):
             os.environ.pop("TYPESAFE_API_KEY", None)
+            # Isolate from the real ~/.tidy/.env, which is checked first and would leak into the failure message.
+            os.environ["TIDY_DATA_DIR"] = str(Path(d) / "data")
             (Path(d) / ".env").write_text("TYPESAFE_API_KEY='abc123'\n")
             cwd = os.getcwd()
             os.chdir(d)

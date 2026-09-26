@@ -39,6 +39,13 @@ class WatchHistoryTests(unittest.TestCase):
             self.assertEqual(watch_counts(path, days=90, now=NOW), {"UCaaa": 2})
             self.assertEqual(watch_counts(path, days=365, now=NOW), {"UCaaa": 2, "UCbbb": 1})
 
+    def test_parse_reads_day_first_takeout_dates(self):
+        html = (cell("v1", "UCaaa", "Alpha", "18 Sept 2026, 21:05:11 IST")
+                + cell("v2", "UCbbb", "Beta", "2 Jan 2026, 9:00:00 pm GMT"))
+
+        self.assertEqual([e["watched_at"] for e in parse(html)],
+                         [datetime(2026, 9, 18, 21, 5, 11), datetime(2026, 1, 2, 21, 0, 0)])
+
 
 if __name__ == "__main__":
     unittest.main()
