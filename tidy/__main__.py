@@ -95,7 +95,7 @@ def main(argv=None):
     jev.add_argument("--habits", default=None, help="Owner viewing habits; defaults to profile.json viewing_habits")
     jev.add_argument("--execute", action="store_true")
     second = commands.add_parser("escalate", help="Second opinion on channels Jev flags as low quality: dry run by default")
-    second.add_argument("--model", default="claude-opus-5")
+    second.add_argument("--model", default="claude-opus-5-5")
     second.add_argument("--execute", action="store_true")
     proposals = commands.add_parser("propose", help="Offline: Markdown report of proposals from stored samples and judgments")
     proposals.add_argument("--html", type=Path, help="Write a self-contained HTML review page to this path instead of Markdown")

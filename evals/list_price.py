@@ -13,7 +13,7 @@ from tidy import judge, store
 from evals.claude_baseline import eval_samples, prompt_for
 
 PRICES = {  # USD per million tokens: (input, output)
-    "claude-fable-5-1": (10, 50), "claude-opus-5": (5, 25), "claude-sonnet-5": (2, 10),
+    "claude-fable-5-1": (10, 50), "claude-opus-5-5": (4, 20), "claude-opus-5": (5, 25), "claude-sonnet-5": (2, 10),
     "claude-haiku-4-5-20251001": (1, 5), "haiku": (1, 5),
     "gpt-6-astra": (10, 50), "gpt-5.6-sol": (4, 20), "gpt-5.6-terra": (2, 12), "gpt-5.6-luna": (0.2, 1.2)}
 CHARS_PER_TOKEN = 3.5

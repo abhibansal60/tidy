@@ -254,7 +254,7 @@ Set `watch_history_path` in `profile.json` (a Google Takeout `watch-history.html
 `tidy propose` switches to policy-2: watched in the last `watch_window_days` (default 42, six weeks) is KEEP; unwatched goes
 to REVIEW; a channel is proposed for UNSUBSCRIBE only when Jev and a second opinion both rate its value below
 `low_quality_value` (default 0.5), whatever its watch count. `tidy escalate` (dry run by default) sends only the
-channels Jev flags to a stronger model (`--model`, default `claude-opus-5`, through Claude Code headless) and stores
+channels Jev flags to a stronger model (`--model`, default `claude-opus-5-5`, through Claude Code headless) and stores
 the answers with the evidence's 30-day expiry.
 
 ## Inventory behavior and quota
