@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 (2026-09-27)
 
 - **Mail:** new `Action Needed` category (kept in the inbox) for automated mail that asks you to do something or warns
   of a problem: action required, failed payment or build, expiring subscription, security alert. Before, these counted
