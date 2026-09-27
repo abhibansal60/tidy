@@ -16,7 +16,7 @@ tested code decides what that verdict is allowed to do, and nothing risky happen
 
 | | Gmail | YouTube |
 |---|---|---|
-| **Sorts** | every email into Needs Reply, Updates, Promos, Sales or Spam | every channel by relevance, value and how likely you are to watch it |
+| **Sorts** | every email into Needs Reply, Action Needed, Updates, Promos, Sales or Spam | every channel by relevance, value and how likely you are to watch it |
 | **Does on its own** | archives bulk mail, only when a second signal agrees | nothing: every change waits for you |
 | **Waits for you** | Trash and Spam, reviewed from a dashboard | unsubscribes and new subscriptions |
 | **Never does** | permanently delete anything, touch starred mail, click unsubscribe links | use browser automation or scrape |

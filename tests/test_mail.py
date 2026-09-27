@@ -114,6 +114,19 @@ class ProposeTests(unittest.TestCase):
 
         self.assertEqual(propose(judgment).action, "REVIEW")
 
+    def test_split_with_action_needed_mass_goes_to_review(self):
+        split = {"Updates": 0.6, "Promos": 0.32, "Action Needed": 0.08}
+        judgment = classify(FakeClient(answer(choice="Updates", confidence=0.5, probabilities=split)),
+                            message(list_unsubscribe=True), OWNER)
+
+        self.assertEqual(propose(judgment).action, "REVIEW")
+
+    def test_action_needed_is_kept_even_when_bulk(self):
+        judgment = classify(FakeClient(answer(choice="Action Needed", confidence=0.95)),
+                            message(list_unsubscribe=True), OWNER)
+
+        self.assertEqual(propose(judgment, ["CATEGORY_UPDATES"]).action, "KEEP")
+
     def test_bulk_split_still_needs_a_corroborating_signal(self):
         split = {"Updates": 0.5, "Promos": 0.5}
         judgment = classify(FakeClient(answer(choice="Promos", confidence=0.5, probabilities=split)),

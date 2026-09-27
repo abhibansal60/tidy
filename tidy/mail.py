@@ -15,12 +15,17 @@ from typesafe_sdk import Choice, TypeSafeError
 from . import store
 from .gmail import APIError
 
-SCHEMA_ID = "mail-v1"  # bump if QUESTIONS/_state change, so stale cached judgments never get reused
+SCHEMA_ID = "mail-v2"  # bump if QUESTIONS/_state change, so stale cached judgments never get reused
 RETENTION_DAYS = 30  # same API-derived-data retention as the YouTube side (AGENTS.md)
 
 CATEGORIES = {
     "Needs Reply": "A person is personally asking the owner something or waiting on a reply from them.",
-    "Updates": "Automated account, service, shipping or informational mail with nothing to answer.",
+    "Action Needed": ("Automated or official mail asking the owner to do something, or warning of a problem: action "
+                      "required, a deadline, a failed payment or build, an expiring subscription or policy, a legal or "
+                      "government notice, or an unexpected security alert. Not routine transaction alerts, receipts, "
+                      "statements, one-time codes or bot status reports."),
+    "Updates": ("Automated account, service, shipping or informational mail with nothing to answer or act on, "
+                "including routine transaction alerts, receipts, statements and one-time codes."),
     "Promos": "Marketing, offers or newsletters, not addressed to the owner personally.",
     "Sales": "A person (not automated marketing) trying to sell the owner something.",
     "Spam": "Unwanted or suspicious mail.",
@@ -34,9 +39,10 @@ QUESTIONS = {
 }
 
 # Category -> proposed action. Never auto-executed here; a later gated step applies it.
-POLICY_VERSION = "mail-policy-3"
+POLICY_VERSION = "mail-policy-4"
 ACTION_FOR_CATEGORY = {
     "Needs Reply": "KEEP",
+    "Action Needed": "KEEP",
     "Updates": "ARCHIVE",
     "Promos": "TRASH",
     "Sales": "TRASH",
@@ -48,7 +54,7 @@ CONFIDENCE_MIN = 0.6  # below this, propose REVIEW instead of trusting the categ
 # probabilities: that case gets the mildest bulk action (ARCHIVE, reversible), never TRASH.
 BULK_SPLIT = ("Updates", "Promos")
 BULK_SPLIT_MIN = 0.9
-BULK_NEEDS_REPLY_MAX = 0.05
+BULK_NEEDS_REPLY_MAX = 0.05  # combined mass of the KEEP categories (Needs Reply, Action Needed)
 EXECUTABLE_ACTIONS = {"ARCHIVE", "TRASH", "SPAM"}
 AUTO_ACTIONS = {"ARCHIVE"}  # everything else (TRASH, SPAM) is proposed but held for a separate gated mail-act step
 
@@ -154,13 +160,14 @@ def propose(judgment, labels=()):
         return MailProposal(judgment.message_id, "REVIEW", judgment.category, ["unknown category"])
     probs = judgment.probabilities or {}
     bulk = sum(probs.get(c, 0) for c in BULK_SPLIT)
+    keep = sum(probs.get(c, 0) for c, a in ACTION_FOR_CATEGORY.items() if a == "KEEP")
     if judgment.confidence >= CONFIDENCE_MIN:
         action = ACTION_FOR_CATEGORY[judgment.category]
         signals = [f"category {judgment.category} ({judgment.confidence:.2f})"]
     elif (judgment.category in BULK_SPLIT and bulk >= BULK_SPLIT_MIN
-          and probs.get("Needs Reply", 0) <= BULK_NEEDS_REPLY_MAX):
+          and keep <= BULK_NEEDS_REPLY_MAX):
         action = "ARCHIVE"
-        signals = [f"bulk split: Updates+Promos {bulk:.2f}, Needs Reply {probs.get('Needs Reply', 0):.2f}"]
+        signals = [f"bulk split: Updates+Promos {bulk:.2f}, Needs Reply/Action Needed {keep:.2f}"]
     else:
         return MailProposal(judgment.message_id, "REVIEW", judgment.category,
                             [f"confidence low ({judgment.confidence:.2f})"])

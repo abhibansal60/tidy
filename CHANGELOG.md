@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- **Mail:** new `Action Needed` category (kept in the inbox) for automated mail that asks you to do something or warns
+  of a problem: action required, failed payment or build, expiring subscription, security alert. Before, these counted
+  as `Updates` and were auto-archived. On the owner's last 5 days of mail (206 messages, 117 auto-archived), 28
+  archived messages now stay in the inbox and 10 go to review; routine transaction alerts and one-time codes stay
+  `Updates`. Bulk-split archiving now also backs off when Jev puts weight on `Action Needed`. Schema `mail-v2`,
+  policy `mail-policy-4` (old cached judgments are not reused).
+
 ## 0.2.1 (2026-09-26)
 
 - **Fix:** watch history from Google Takeout in day-first locales (India, UK: `22 Sept 2026, 14:49:34 IST`) was read
