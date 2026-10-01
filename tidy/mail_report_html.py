@@ -3,7 +3,7 @@
 Sections: Needs you (decisions), FYI (alerts that need no decision), Noise to clear (bulk senders, grouped), Handled
 (auto-archived or queued). No server, no network, no external assets: one file. Every string from Gmail or a
 model is HTML-escaped; the CSP allows only this page's own script and style, by hash. Buttons that change Gmail are
-not here: the page links to the thread in Gmail and states honestly what each unsubscribe link does.
+buttons call /api/mail/act on the same origin (the tidy-mail app), which is the only network access the CSP allows.
 """
 
 import base64
@@ -61,9 +61,16 @@ details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary span{color:var(--muted);font-weight:400;margin-left:8px;font-size:13.5px}
 details.fold[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
 details.fold>.inner{border:1px solid var(--line);border-top:0;border-radius:0 0 12px 12px;background:var(--paper)}
+.acts button{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;font-size:14px;font-weight:550;cursor:pointer}
+.acts button.danger{color:var(--bad)}.acts button:disabled{opacity:.5;cursor:wait}
+.bulk{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 10px}.bulk button{min-height:36px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer}
+.bulk button.danger{color:var(--bad)}
+.item.gone{display:none}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:92vw;display:none;gap:12px;align-items:center;padding:10px 14px;border-radius:12px;background:var(--ink);color:var(--ground);font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+#toast.on{display:flex}#toast.err{background:var(--bad);color:#fff}#toast button{background:none;border:0;color:inherit;text-decoration:underline;font:inherit;cursor:pointer}
 .more>summary{cursor:pointer;padding:10px 14px;color:var(--accent);border-top:1px solid var(--line);font-size:14px}
 .empty{padding:18px 14px;color:var(--muted);background:var(--paper);border:1px dashed var(--line);border-radius:12px}
-@media (max-width:520px){main{padding:14px 12px 72px}.acts a{flex:1 1 auto;justify-content:center}}
+@media (max-width:520px){main{padding:14px 12px 72px}.acts a,.acts button{flex:1 1 auto;justify-content:center}}
 """
 
 JS = """
@@ -76,6 +83,35 @@ q.addEventListener('input',()=>{const s=q.value.trim().toLowerCase();
  document.querySelectorAll('.item').forEach(i=>{i.hidden=!!s&&!i.dataset.t.includes(s)});
  document.querySelectorAll('.card').forEach(c=>{c.hidden=!!s&&!c.querySelector('.item:not([hidden])')});
  if(s)document.querySelectorAll('details.fold,details.more').forEach(d=>d.open=true);});
+
+const key='tidy:'+h.dataset.runAt,toast=document.getElementById('toast');
+let gone=new Set(JSON.parse(localStorage.getItem(key)||'[]')),tt;
+const save=()=>{try{localStorage.setItem(key,JSON.stringify([...gone]))}catch(e){}};
+function counts(){document.querySelectorAll('.chips a[data-b]').forEach(a=>{a.querySelector('b').textContent=document.querySelectorAll('.item[data-b="'+a.dataset.b+'"]:not(.gone)').length});
+ document.querySelectorAll('.card').forEach(c=>{c.hidden=!c.querySelector('.item:not(.gone)')})}
+function sync(){document.querySelectorAll('.item').forEach(i=>i.classList.toggle('gone',gone.has(i.dataset.id)));counts()}
+function say(msg,undo,err){clearTimeout(tt);toast.className='on'+(err?' err':'');toast.textContent='';const s=document.createElement('span');s.textContent=msg;toast.append(s);
+ if(undo){const b=document.createElement('button');b.textContent='Undo';b.onclick=()=>run(undo.op,undo.ids,true);toast.append(b)}
+ tt=setTimeout(()=>toast.className='',10000)}
+async function post(op,ids){const r=await fetch('/api/mail/act',{method:'POST',headers:{'Content-Type':'application/json','X-Tidy':'1'},body:JSON.stringify({op,ids})});
+ const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j}
+async function run(op,ids,isUndo){document.querySelectorAll('button').forEach(b=>b.disabled=true);
+ try{let applied=[],skipped=[],undo=null,last;
+  for(let i=0;i<ids.length;i+=50){const j=await post(op,ids.slice(i,i+50));last=j;
+   for(const [id,res] of Object.entries(j.results)){(res==='applied'?applied:skipped).push([id,res])}
+   if(j.undo)undo=undo?{op:j.undo.op,ids:undo.ids.concat(j.undo.ids)}:j.undo}
+  if(op==='unsubscribe'){const res=Object.values(last.results)[0];
+   say(res==='requested'?'Unsubscribe request sent. The sender accepted it; Tidy will flag it if mail keeps coming.':res==='link_only'?'This sender has no one-click unsubscribe. Use its Unsubscribe link.':res==='failed'?'The sender did not accept the request. Use its Unsubscribe link.':'Blocked: unsafe unsubscribe address.',null,res!=='requested');return}
+  const back=op==='inbox'||op==='untrash'||op==='unkeep';
+  for(const [id] of applied){back?gone.delete(id):gone.add(id)}
+  save();sync();
+  const verb={archive:'Archived',inbox:'Moved back',keep:'Kept',unkeep:'Unmarked',trash:'Trashed',untrash:'Restored'}[op];
+  say(verb+' '+applied.length+(skipped.length?'. Skipped '+skipped.length+' ('+skipped[0][1].replace('skipped: ','')+')':''),isUndo?null:undo,false)
+ }catch(e){say('Failed: '+e.message,null,true)}finally{document.querySelectorAll('button').forEach(b=>b.disabled=false)}}
+document.addEventListener('click',e=>{const b=e.target.closest('button[data-op]');if(!b)return;
+ const ids=b.dataset.ids?b.dataset.ids.split(','):[b.closest('.item').dataset.id];
+ if(b.dataset.op==='trash'&&ids.length>5&&!confirm('Trash '+ids.length+' messages?'))return;run(b.dataset.op,ids)});
+sync();
 """ % STALE_HOURS
 
 
@@ -124,7 +160,23 @@ def _unsub(r):
     return "".join(parts)
 
 
-def _item(r, account, unsub=False):
+def _buttons(r, b):
+    if b == "handled":
+        return _btn("inbox", "Back to inbox") if r.get("outcome") == "applied" else _btn("archive", "Archive")
+    if b == "needs_you":
+        return _btn("archive", "Archive") + _btn("keep", "Keep") + _btn("trash", "Trash", True)
+    if b == "fyi":
+        return _btn("archive", "Archive")
+    one = _btn("unsubscribe", "One-click unsubscribe") if r.get("unsubscribe_one_click") and (r.get("unsubscribe") or {}).get("http") else ""
+    return _btn("archive", "Archive") + _btn("trash", "Trash", True) + one
+
+
+def _btn(op, label, danger=False, ids=None):
+    attr = f' data-ids="{escape(",".join(ids), quote=True)}"' if ids else ""
+    return f'<button type="button" data-op="{op}"{attr}{" class=danger" if danger else ""}>{escape(label)}</button>'
+
+
+def _item(r, account, unsub=False, b="needs_you"):
     subject = escape(r["subject"] or "(no subject)")
     sender = escape(parseaddr(r["sender"])[0] or r["sender"])
     snippet = escape((r.get("snippet") or "")[:150])
@@ -135,18 +187,26 @@ def _item(r, account, unsub=False):
     done = DONE_LABEL[r["action"]] if raw_outcome == "applied" and r["action"] in DONE_LABEL else PROPOSED_LABEL[r["action"]]
     status = f" <em>{escape(outcome)}</em>" if outcome else ""
     title = escape((r["subject"] + " " + r["sender"]).lower(), quote=True)
-    return (f'<div class="item" data-t="{title}"><div class="subj">{subject}</div>'
+    return (f'<div class="item" data-id="{escape(r['id'], quote=True)}" data-b="{b}" data-t="{title}"><div class="subj">{subject}</div>'
             f'<div class="snip">{sender}: {snippet}</div>'
             f'<div class="why"><em>{escape(r["category"])} {r["confidence"]:.2f}</em>{escape(done)}{status}'
             f'{(" · " + reason) if reason else ""}</div>'
             f'<div class="acts"><a class="main" href="{_gmail_url(r, account)}" target="_blank" rel="noopener noreferrer">Open in Gmail</a>'
-            f'{_unsub(r) if unsub else ""}</div></div>')
+            f'{_buttons(r, b)}{_unsub(r) if unsub else ""}</div></div>')
+
+
+def _bulk(rows, ops):
+    if len(rows) < 2 or not ops:
+        return ""
+    ids = [r["id"] for r in rows]
+    names = {"archive": "Archive all", "trash": "Trash all"}
+    return '<div class="bulk">' + "".join(_btn(op, f"{names[op]} {len(ids)}", op == "trash", ids) for op in ops) + "</div>"
 
 
 GROUP_SHOWN = 2  # a sender with many near-identical mails shows its top few; the rest sit behind one fold
 
 
-def _groups(rows, account, unsub=False, by_size=True):
+def _groups(rows, account, b, unsub=False, by_size=True, bulk=()):
     groups = {}
     for r in rows:
         key, name = _sender_key(r)
@@ -155,10 +215,10 @@ def _groups(rows, account, unsub=False, by_size=True):
     cards = []
     for g in ordered:
         rs = g["rows"]
-        head = "".join(_item(r, account, unsub) for r in rs[:GROUP_SHOWN])
+        head = "".join(_item(r, account, unsub, b) for r in rs[:GROUP_SHOWN])
         more = (f'<details class="more"><summary>Show {len(rs) - GROUP_SHOWN} more from {escape(g["name"])}</summary>'
-                + "".join(_item(r, account, unsub) for r in rs[GROUP_SHOWN:]) + "</details>") if len(rs) > GROUP_SHOWN else ""
-        cards.append(f'<section class="card"><header><b>{escape(g["name"])}</b><span>{len(rs)} message{"s" if len(rs) != 1 else ""}</span></header>{head}{more}</section>')
+                + "".join(_item(r, account, unsub, b) for r in rs[GROUP_SHOWN:]) + "</details>") if len(rs) > GROUP_SHOWN else ""
+        cards.append(f'<section class="card"><header><b>{escape(g["name"])}</b><span>{len(rs)} message{"s" if len(rs) != 1 else ""}</span></header>{_bulk(rs, bulk)}{head}{more}</section>')
     return "".join(cards)
 
 
@@ -181,14 +241,14 @@ def render(rows, applied=False, run_at=None, account=None):
              f"{done} archived for you. Nothing else was touched." if done else
              "Nothing was actually applied this run (closed gate, cap or a failure).")
     health_cls = "health" + ("" if applied else " dry")
-    needs = (_groups(by["needs_you"], account, by_size=False) if by["needs_you"] else
+    needs = (_groups(by["needs_you"], account, "needs_you", by_size=False) if by["needs_you"] else
              '<div class="empty">Nothing needs you right now.</div>')
-    noise = _groups(by["noise"], account, unsub=True)
-    chips = (f'<a class="hot" href="#needs"><b>{len(by["needs_you"])}</b> need you</a>'
-             f'<a href="#fyi"><b>{len(by["fyi"])}</b> FYI</a>'
-             f'<a href="#noise"><b>{len(by["noise"])}</b> noise</a>'
-             f'<a href="#handled"><b>{len(by["handled"])}</b> handled</a>')
-    csp = f"default-src 'none'; style-src {_hash(CSS)}; script-src {_hash(JS)}; base-uri 'none'; form-action 'none'"
+    noise = _groups(by["noise"], account, "noise", unsub=True, bulk=("archive", "trash"))
+    chips = (f'<a class="hot" data-b="needs_you" href="#needs"><b>{len(by["needs_you"])}</b> need you</a>'
+             f'<a data-b="fyi" href="#fyi"><b>{len(by["fyi"])}</b> FYI</a>'
+             f'<a data-b="noise" href="#noise"><b>{len(by["noise"])}</b> noise</a>'
+             f'<a data-b="handled" href="#handled"><b>{len(by["handled"])}</b> handled</a>')
+    csp = f"default-src 'none'; style-src {_hash(CSS)}; script-src {_hash(JS)}; base-uri 'none'; form-action 'none'; connect-src 'self'"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{csp}">
@@ -200,10 +260,10 @@ def render(rows, applied=False, run_at=None, account=None):
 <h2 id="needs">Needs you<b>{len(by["needs_you"])}</b></h2>
 {needs}
 <h2 id="fyi">FYI, no decision needed<b>{len(by["fyi"])}</b></h2>
-{_fold("Bank, payment and system alerts", len(by["fyi"]), _groups(by["fyi"], account), "personally addressed, automated sender") or '<div class="empty">No alerts.</div>'}
+{_fold("Bank, payment and system alerts", len(by["fyi"]), _groups(by["fyi"], account, "fyi", bulk=("archive",)), "personally addressed, automated sender") or '<div class="empty">No alerts.</div>'}
 <h2 id="noise">Noise to clear<b>{len(by["noise"])}</b></h2>
 {noise or '<div class="empty">No bulk mail proposed for trash.</div>'}
 <h2 id="handled">Handled<b>{len(by["handled"])}</b></h2>
-{_fold("Archived or queued to archive", len(by["handled"]), _groups(by["handled"], account)) or '<div class="empty">Nothing archived.</div>'}
-</main><script>{JS}</script></body></html>
+{_fold("Archived or queued to archive", len(by["handled"]), _groups(by["handled"], account, "handled")) or '<div class="empty">Nothing archived.</div>'}
+</main><div id="toast" role="status" aria-live="polite"></div><script>{JS}</script></body></html>
 """

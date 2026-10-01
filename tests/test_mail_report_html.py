@@ -61,7 +61,7 @@ class RenderTests(unittest.TestCase):
         self.assertIn("you confirm there", noise)
         self.assertIn('href="mailto:u@x.com"', noise)
         self.assertIn("opens your mail app", noise)
-        self.assertNotIn("Unsubscribe", m.render([row(action="KEEP", category="Needs Reply", unsubscribe=unsub)]))
+        self.assertNotIn("Unsubscribe</a>", m.render([row(action="KEEP", category="Needs Reply", unsubscribe=unsub)]))
 
     def test_senders_grouped_with_count(self):
         rows = [row(id=f"a{i}", sender="Shop <d@shop.com>", action="TRASH", category="Promos") for i in range(3)]
@@ -85,3 +85,31 @@ class RenderTests(unittest.TestCase):
         html = m.render([row(action="TRASH", outcome="held")], applied=True)
         self.assertNotIn("—", html)
         self.assertNotIn("–", html)
+
+
+    def test_row_buttons_by_bucket(self):
+        keep = m.render([row(action="KEEP", category="Needs Reply")])
+        for op in ("archive", "keep", "trash"):
+            self.assertIn(f'data-op="{op}"', keep)
+        noise = m.render([row(action="TRASH", category="Promos")])
+        self.assertIn('data-op="trash"', noise)
+        self.assertNotIn('data-op="keep"', noise)
+        done = m.render([row(action="ARCHIVE", outcome="applied")], applied=True)
+        self.assertIn('data-op="inbox"', done)
+
+    def test_bulk_buttons_carry_all_ids_for_sender_group(self):
+        rows = [row(id=f"a{i}", sender="Shop <d@shop.com>", action="TRASH", category="Promos") for i in range(3)]
+        html = m.render(rows)
+        self.assertIn('data-op="trash" data-ids="a0,a1,a2" class=danger>Trash all 3', html)
+
+    def test_one_click_button_only_when_flag_and_https_link(self):
+        unsub = {"http": "https://x.com/u", "mailto": None}
+        on = m.render([dict(row(action="TRASH", category="Promos", unsubscribe=unsub), unsubscribe_one_click=True)])
+        off = m.render([row(action="TRASH", category="Promos", unsubscribe=unsub)])
+        self.assertIn('data-op="unsubscribe"', on)
+        self.assertNotIn('data-op="unsubscribe"', off)
+
+    def test_csp_allows_only_same_origin_requests(self):
+        html = m.render([row()])
+        self.assertIn("connect-src 'self'", html)
+        self.assertIn("default-src 'none'", html)
