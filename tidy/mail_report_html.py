@@ -28,9 +28,10 @@ CSS = """
 *{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:1180px;margin:0 auto;padding:20px 14px 88px}
-h1{margin:0 0 4px;font-size:22px;font-weight:650;letter-spacing:-.01em}
+h1{display:inline-block;margin:0 14px 4px 0;font-size:22px;font-weight:650;letter-spacing:-.01em}
 h2{margin:28px 0 8px;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 h2 b{color:var(--ink);font-size:15px;letter-spacing:0;margin-left:6px}
+.nav{display:inline-block}.nav a{color:var(--accent);font-size:14px}
 .health{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:10px 12px;margin:10px 0 0;border:1px solid var(--line);background:var(--paper);border-radius:10px;font-size:14px;color:var(--muted)}
 .health.stale,.health.dry{background:var(--warnbg);border-color:var(--warn);color:var(--warn)}
 .health.stale{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
@@ -290,12 +291,15 @@ def render(rows, applied=False, run_at=None, account=None):
     chips = "".join(f'<a href="#{k}" data-b="{k}" aria-selected="false"><b>{len(by[k])}</b> {label}</a>' for k, label, _, _ in panes)
     body = "\n".join(f'<section class="tab" data-tab="{k}" hidden>' + (_unsub_bar(by["noise"]) if k == "noise" else "") + (f'<div class="grid">{cards}</div>' if cards else f'<div class="empty">{escape(empty)}</div>') + "</section>"
                      for k, _, cards, empty in panes)
-    csp = f"default-src 'none'; style-src {_hash(CSS)}; script-src {_hash(JS)}; base-uri 'none'; form-action 'none'; connect-src 'self'"
+    csp = f"default-src 'none'; style-src {_hash(CSS)}; script-src {_hash(JS)}; base-uri 'none'; form-action 'none'; connect-src 'self'; manifest-src 'self'; img-src 'self'"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{csp}">
+<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Mail">
+<meta name="theme-color" content="#1F5FD0">
 <title>Mail</title><style>{CSS}</style></head><body><main>
-<h1>Mail</h1>
+<h1>Mail</h1><nav class="nav"><a href="/jobs">Jobs</a></nav>
 <div id="health" class="{health_cls}" data-run-at="{escape(run_at or '', quote=True)}"><span>Ran <strong data-when>{escape(run_at or 'unknown time')}</strong></span><span data-state>{escape(state)}</span><span>{len(rows)} messages judged by Jev</span></div>
 <div class="chips">{chips}</div>
 <input id="q" type="search" placeholder="Search subject or sender" aria-label="Search subject or sender">
