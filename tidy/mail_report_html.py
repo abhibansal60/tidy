@@ -218,7 +218,7 @@ def _bulk(rows, ops):
     if len(rows) < 2 or not ops:
         return ""
     ids = [r["id"] for r in rows]
-    names = {"archive": "Archive all", "trash": "Trash all"}
+    names = {"archive": "Archive all", "keep": "Keep all", "trash": "Trash all"}
     return '<div class="bulk">' + "".join(_btn(op, f"{names[op]} {len(ids)}", op == "trash", ids) for op in ops) + "</div>"
 
 
@@ -280,7 +280,7 @@ def render(rows, applied=False, run_at=None, account=None):
              "Nothing was actually applied this run (closed gate, cap or a failure).")
     health_cls = "health" + ("" if applied else " dry")
     panes = [
-        ("needs_you", "need you", _groups(by["needs_you"], account, "needs_you", by_size=False), "Nothing needs you right now."),
+        ("needs_you", "need you", _groups(by["needs_you"], account, "needs_you", by_size=False, bulk=("archive", "keep")), "Nothing needs you right now."),
         ("fyi", "FYI", _groups(by["fyi"], account, "fyi", bulk=("archive",)), "No alerts. These are automated bank, payment and system mails that need no decision."),
         ("noise", "noise", _groups(by["noise"], account, "noise", unsub=True, bulk=("archive", "trash")), "No bulk mail proposed for trash."),
         ("handled", "handled", _groups(by["handled"], account, "handled"), "Nothing archived."),

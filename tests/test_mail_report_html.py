@@ -129,3 +129,10 @@ class RenderTests(unittest.TestCase):
         self.assertIn('rel="manifest"', html)
         self.assertIn('rel="apple-touch-icon"', html)
         self.assertIn("manifest-src 'self'", html)
+
+
+    def test_needs_you_group_with_several_messages_gets_archive_all_and_keep_all(self):
+        rows = [row(id=f"k{i}", sender="Google <g@x.com>", action="KEEP", category="Action Needed") for i in range(3)]
+        html = m.render(rows)
+        self.assertIn('data-op="archive" data-ids="k0,k1,k2">Archive all 3', html)
+        self.assertIn('data-op="keep" data-ids="k0,k1,k2">Keep all 3', html)
