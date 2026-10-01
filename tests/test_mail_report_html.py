@@ -1,113 +1,87 @@
 import unittest
 
-from tidy import mail_report_html
+from tidy import mail_report_html as m
 
 
 def row(id="m1", subject="Invoice ready", sender="Billing <b@x.com>", category="Updates",
-       confidence=0.9, action="ARCHIVE", signals=None, outcome=None, unsubscribe=None):
-    return {"id": id, "subject": subject, "sender": sender, "category": category, "confidence": confidence,
-            "action": action, "signals": signals or [f"category {category} ({confidence:.2f})"], "outcome": outcome,
+        confidence=0.9, action="ARCHIVE", signals=None, outcome=None, unsubscribe=None, thread_id=None):
+    return {"id": id, "thread_id": thread_id or id, "subject": subject, "sender": sender, "snippet": "snip",
+            "category": category, "confidence": confidence, "action": action,
+            "signals": signals or [f"category {category} ({confidence:.2f})"], "outcome": outcome,
             "unsubscribe": unsubscribe}
 
 
+class BucketTests(unittest.TestCase):
+    def test_keep_needs_you(self):
+        self.assertEqual(m.bucket(row(action="KEEP", category="Needs Reply")), "needs_you")
+
+    def test_automated_confident_update_review_is_fyi(self):
+        r = row(action="REVIEW", sender="HDFC <alerts@hdfcbank.bank.in>", confidence=0.92)
+        self.assertEqual(m.bucket(r), "fyi")
+
+    def test_review_stays_needs_you_when_low_confidence_or_human_sender(self):
+        self.assertEqual(m.bucket(row(action="REVIEW", sender="X <no-reply@x.com>", confidence=0.51)), "needs_you")
+        self.assertEqual(m.bucket(row(action="REVIEW", sender="Asha <asha@gmail.com>", confidence=0.95)), "needs_you")
+        self.assertEqual(m.bucket(row(action="REVIEW", sender="X <no-reply@x.com>", category="Action Needed")), "needs_you")
+
+    def test_archive_handled_trash_and_spam_are_noise(self):
+        self.assertEqual(m.bucket(row(action="ARCHIVE")), "handled")
+        self.assertEqual(m.bucket(row(action="TRASH", category="Promos")), "noise")
+        self.assertEqual(m.bucket(row(action="SPAM", category="Spam")), "noise")
+
+
 class RenderTests(unittest.TestCase):
-    def test_dry_run_shows_no_outcomes_and_says_so(self):
-        html = mail_report_html.render([row()], applied=False)
+    def test_dry_run_says_so_and_applied_run_counts_archived(self):
+        self.assertIn("Manual dry run", m.render([row()], applied=False))
+        html = m.render([row(outcome="applied")], applied=True)
+        self.assertIn("1 archived for you", html)
+        self.assertIn("Archived", html)
 
-        self.assertIn("dry run", html)
-        self.assertNotIn("Outcome:", html)
+    def test_zero_applied_is_not_claimed_as_success(self):
+        self.assertIn("Nothing was actually applied", m.render([row(outcome="held")], applied=True))
 
-    def test_applied_run_shows_outcome_per_row(self):
-        html = mail_report_html.render([row(outcome="applied")], applied=True)
+    def test_needs_you_comes_before_noise_and_counts_are_shown(self):
+        html = m.render([row(id="t", subject="TTT", action="TRASH", category="Promos"),
+                         row(id="k", subject="KKK", action="KEEP", category="Needs Reply")])
+        self.assertLess(html.index("KKK"), html.index("TTT"))
+        self.assertIn("<b>1</b> need you", html)
+        self.assertIn("<b>1</b> noise", html)
 
-        self.assertIn("Outcome: Applied", html)
-        self.assertIn("were applied to Gmail", html)
+    def test_empty_needs_you_state(self):
+        self.assertIn("Nothing needs you right now", m.render([row()]))
 
-    def test_unsubscribe_link_rendered_as_clickable_not_autofetched(self):
-        html = mail_report_html.render([row(action="TRASH", category="Promos",
-                                            unsubscribe={"http": "https://x.com/unsub?id=1", "mailto": None})])
+    def test_open_in_gmail_link_uses_thread_and_account(self):
+        html = m.render([row(action="KEEP", thread_id="abc123")], account="me@gmail.com")
+        self.assertIn("https://mail.google.com/mail/?authuser=me@gmail.com#all/abc123", html)
 
-        self.assertIn('href="https://x.com/unsub?id=1"', html)
-        self.assertIn("Unsubscribe link", html)
-        self.assertIn('rel="noopener noreferrer"', html)
+    def test_unsubscribe_is_honest_and_only_on_noise(self):
+        unsub = {"http": "https://x.com/u?id=1", "mailto": "mailto:u@x.com"}
+        noise = m.render([row(action="TRASH", category="Promos", unsubscribe=unsub)])
+        self.assertIn('href="https://x.com/u?id=1"', noise)
+        self.assertIn("you confirm there", noise)
+        self.assertIn('href="mailto:u@x.com"', noise)
+        self.assertIn("opens your mail app", noise)
+        self.assertNotIn("Unsubscribe", m.render([row(action="KEEP", category="Needs Reply", unsubscribe=unsub)]))
 
-    def test_mailto_only_unsubscribe_shown_as_mail_link(self):
-        html = mail_report_html.render([row(unsubscribe={"http": None, "mailto": "mailto:unsub@x.com"})])
+    def test_senders_grouped_with_count(self):
+        rows = [row(id=f"a{i}", sender="Shop <d@shop.com>", action="TRASH", category="Promos") for i in range(3)]
+        html = m.render(rows)
+        self.assertIn("3 messages", html)
+        self.assertEqual(html.count('<section class="card">'), 1)
+        self.assertIn("Show 1 more from Shop", html)
 
-        self.assertIn('href="mailto:unsub@x.com"', html)
-        self.assertIn("Unsubscribe by email", html)
+    def test_health_line_carries_run_time_for_staleness_check(self):
+        self.assertIn('data-run-at="2026-10-01T16:51:07+00:00"', m.render([row()], run_at="2026-10-01T16:51:07+00:00"))
 
-    def test_no_unsubscribe_info_renders_nothing_extra(self):
-        html = mail_report_html.render([row(unsubscribe=None)])
-
-        self.assertNotIn("Unsubscribe", html)
-
-    def test_unsubscribe_shortlist_groups_by_sender_most_first(self):
-        unsub = {"http": "https://x.com/u", "mailto": None}
-        rows = [row(id=f"a{i}", sender="Shop <deals@shop.com>", action="TRASH", unsubscribe=unsub) for i in range(3)]
-        rows += [row(id="b1", sender="News <n@news.com>", unsubscribe=unsub),
-                 row(id="c1", sender="Friend <f@x.com>", action="KEEP", unsubscribe=unsub)]  # KEEP never shortlisted
-
-        html = mail_report_html.render(rows)
-
-        self.assertIn("Unsubscribe shortlist", html)
-        self.assertIn("2 bulk senders", html)
-        self.assertLess(html.index("Shop (3)"), html.index("News (1)"))
-        self.assertNotIn("Friend (", html)
-
-    def test_no_dashes_in_lede_prose(self):
-        html = mail_report_html.render([row(action="TRASH", outcome="held")], applied=True)
-        self.assertNotIn("\u2014", html)
-        self.assertNotIn("\u2013", html)
-
-    def test_error_outcome_shown_verbatim_not_hidden(self):
-        html = mail_report_html.render([row(action="TRASH", category="Promos", outcome="error: quota exceeded")], applied=True)
-
-        self.assertIn("Outcome: error: quota exceeded", html)
-
-    def test_held_trash_proposal_never_claims_applied(self):
-        html = mail_report_html.render([row(action="TRASH", category="Promos", outcome="held")], applied=True)
-
-        self.assertIn("Outcome: Held for review", html)
-        self.assertNotIn("Outcome: Applied", html)
-
-    def test_review_sorts_before_archive_trash_and_keep(self):
-        html = mail_report_html.render([
-            row(id="a", subject="AAA archived", action="ARCHIVE"),
-            row(id="t", subject="TTT trashed", action="TRASH", category="Promos"),
-            row(id="r", subject="RRR review", action="REVIEW", confidence=0.4),
-            row(id="k", subject="KKK keep", action="KEEP", category="Needs Reply"),
-        ])
-
-        self.assertLess(html.index("RRR review"), html.index("AAA archived"))
-        self.assertLess(html.index("AAA archived"), html.index("TTT trashed"))
-        self.assertLess(html.index("TTT trashed"), html.index("KKK keep"))
-
-    def test_html_escapes_subject_and_sender(self):
-        html = mail_report_html.render([row(subject="<script>alert(1)</script>", sender="a<b@x.com>")])
-
+    def test_escapes_subject_sender_and_attribute_values(self):
+        html = m.render([row(subject="<script>alert(1)</script>", sender='a"<b@x.com>', action="KEEP")])
         self.assertNotIn("<script>alert(1)</script>", html)
         self.assertIn("&lt;script&gt;", html)
 
-    def test_counts_tab_reflects_action_mix(self):
-        html = mail_report_html.render([row(action="ARCHIVE"), row(action="ARCHIVE"), row(action="SPAM", category="Spam")])
+    def test_error_outcome_shown_verbatim(self):
+        self.assertIn("error: quota exceeded", m.render([row(action="TRASH", category="Promos", outcome="error: quota exceeded")], applied=True))
 
-        self.assertIn("Archive 2", html)
-        self.assertIn("Spam 1", html)
-
-    def test_verdict_badge_is_past_tense_only_when_actually_applied(self):
-        applied_html = mail_report_html.render([row(action="ARCHIVE", outcome="applied")], applied=True)
-        held_html = mail_report_html.render([row(action="ARCHIVE", outcome="held")], applied=True)
-        dry_html = mail_report_html.render([row(action="ARCHIVE")], applied=False)
-
-        self.assertIn('class="verdict">Archived<', applied_html)
-        self.assertIn('class="verdict">Archive<', held_html)
-        self.assertIn('class="verdict">Archive<', dry_html)
-
-    def test_lede_reflects_actual_applied_count_not_requested_mode(self):
-        none_applied = mail_report_html.render([row(action="ARCHIVE", outcome="held")], applied=True)
-        some_applied = mail_report_html.render([row(id="a", action="ARCHIVE", outcome="applied"),
-                                                 row(id="b", action="TRASH", category="Promos", outcome="held")], applied=True)
-
-        self.assertIn("Nothing was actually applied this run", none_applied)
-        self.assertIn("1 action(s) below were applied", some_applied)
+    def test_no_dashes_in_prose(self):
+        html = m.render([row(action="TRASH", outcome="held")], applied=True)
+        self.assertNotIn("—", html)
+        self.assertNotIn("–", html)

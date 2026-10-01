@@ -317,12 +317,14 @@ def main(argv=None):
                         "outcome": (outcomes.get(i, "held" if p.action in mail.EXECUTABLE_ACTIONS else None)
                                     if args.apply else None),
                         "unsubscribe": (parse_list_unsubscribe(by_id[i]["list_unsubscribe_value"])
-                                        if by_id[i]["list_unsubscribe"] else None)}
+                                        if by_id[i]["list_unsubscribe"] else None),
+                        "unsubscribe_one_click": by_id[i]["list_unsubscribe_one_click"]}
                         for i, p in proposals.items()]
+                run_at = store.now()
                 if args.html:
-                    store.private_text(args.html, mail_report_html.render(rows, applied=args.apply))
+                    store.private_text(args.html, mail_report_html.render(rows, applied=args.apply, run_at=run_at, account=email))
                 if args.json:
-                    store.private_text(args.json, json.dumps({"run_at": store.now(), "query": args.query, "rows": rows, "errors": {i: j for i, j in judgments.items() if isinstance(j, str)}}, indent=1))
+                    store.private_text(args.json, json.dumps({"run_at": run_at, "mode": "apply" if args.apply else "dry", "query": args.query, "rows": rows, "errors": {i: j for i, j in judgments.items() if isinstance(j, str)}}, indent=1))
                 mutation_errors = {i: v for i, v in outcomes.items() if v != "applied"}
                 output = {"messages": len(messages), "errors": {i: j for i, j in judgments.items() if isinstance(j, str)},
                           "applied": args.apply, "gate": gate, "gate_overridden": args.apply and not gate["open"] and args.override_gate,
