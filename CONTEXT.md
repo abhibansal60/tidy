@@ -52,7 +52,8 @@ _Avoid_: consent, sign-off
 An owner pass over proposals, producing owner labels and overrides.
 
 **Run**:
-One owner-started execution: collect, judge, propose, act within caps, audit. Never unattended.
+One owner-started execution of the YouTube flow: collect, judge, propose, act within caps, audit. Never unattended.
+Mail triage is separate: `mail-triage --apply` only archives (label-only, reversible) and may run from cron with `--override-gate`; TRASH and SPAM stay held for an owner-run `mail-act`.
 _Avoid_: job, cron
 
 **Caps**:
