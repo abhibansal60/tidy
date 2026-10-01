@@ -113,3 +113,12 @@ class RenderTests(unittest.TestCase):
         html = m.render([row()])
         self.assertIn("connect-src 'self'", html)
         self.assertIn("default-src 'none'", html)
+
+
+    def test_bulk_unsubscribe_bar_one_id_per_one_click_sender(self):
+        u = {"http": "https://x.com/u", "mailto": None}
+        mk = lambda i, who, oc: dict(row(id=i, sender=f"S <{who}@x.com>", action="TRASH", category="Promos", unsubscribe=u), unsubscribe_one_click=oc)
+        html = m.render([mk("a1", "a", True), mk("a2", "a", True), mk("b1", "b", True), mk("c1", "c", False)])
+        self.assertIn('data-op="unsub-all" data-ids="a1,b1"', html)
+        self.assertIn("Unsubscribe from 2 senders", html)
+        self.assertNotIn('data-op="unsub-all"', m.render([mk("c1", "c", False)]))

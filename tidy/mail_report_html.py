@@ -42,6 +42,9 @@ input[type=search]{width:100%;margin:16px 0 0;padding:10px 12px;font:inherit;bor
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start;margin-top:14px}
 .tab[hidden]{display:none}
+.unsubbar{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:space-between;margin-top:14px;padding:10px 14px;border:1px solid var(--line);border-radius:12px;background:var(--paper);font-size:14px;color:var(--muted)}
+.unsubbar button{min-height:38px;padding:0 14px;border-radius:9px;border:1px solid var(--accent);background:var(--accent);color:#fff;font:inherit;font-weight:550;cursor:pointer}
+.unsubbar button:disabled{opacity:.5;cursor:wait}
 .chips a{cursor:pointer}.chips a[aria-selected=true]{background:var(--accent);color:#fff}
 .snip{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .card{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden}
@@ -108,14 +111,22 @@ async function run(op,ids,isUndo){document.querySelectorAll('button').forEach(b=
    for(const [id,res] of Object.entries(j.results)){(res==='applied'?applied:skipped).push([id,res])}
    if(j.undo)undo=undo?{op:j.undo.op,ids:undo.ids.concat(j.undo.ids)}:j.undo}
   if(op==='unsubscribe'){const res=Object.values(last.results)[0];
-   say(res==='requested'?'Unsubscribe request sent. The sender accepted it; Tidy will flag it if mail keeps coming.':res==='link_only'?'This sender has no one-click unsubscribe. Use its Unsubscribe link.':res==='failed'?'The sender did not accept the request. Use its Unsubscribe link.':'Blocked: unsafe unsubscribe address.',null,res!=='requested');return}
+   if(res==='requested')markUnsub(ids[0]);say(res==='requested'?'Unsubscribe request sent. The sender accepted it; Tidy will flag it if mail keeps coming.':res==='link_only'?'This sender has no one-click unsubscribe. Use its Unsubscribe link.':res==='failed'?'The sender did not accept the request. Use its Unsubscribe link.':'Blocked: unsafe unsubscribe address.',null,res!=='requested');return}
   const back=op==='inbox'||op==='untrash'||op==='unkeep';
   for(const [id] of applied){back?gone.delete(id):gone.add(id)}
   save();sync();
   const verb={archive:'Archived',inbox:'Moved back',keep:'Kept',unkeep:'Unmarked',trash:'Trashed',untrash:'Restored'}[op];
   say(verb+' '+applied.length+(skipped.length?'. Skipped '+skipped.length+' ('+skipped[0][1].replace('skipped: ','')+')':''),isUndo?null:undo,false)
  }catch(e){say('Failed: '+e.message,null,true)}finally{document.querySelectorAll('button').forEach(b=>b.disabled=false)}}
+async function unsubAll(ids){document.querySelectorAll('button').forEach(b=>b.disabled=true);const t={requested:0,link_only:0,failed:0,blocked:0};
+ try{for(let i=0;i<ids.length;i++){say('Unsubscribing '+(i+1)+' of '+ids.length+'...',null,false);
+   let res;try{const j=await post('unsubscribe',[ids[i]]);res=Object.values(j.results)[0]}catch(e){res='failed'}
+   t[res]=(t[res]||0)+1;if(res==='requested')markUnsub(ids[i])}
+  say('Requested '+t.requested+' of '+ids.length+(t.link_only+t.failed+t.blocked?'. '+(t.link_only+t.failed+t.blocked)+' need the Unsubscribe link instead.':'.'),null,t.requested===0)
+ }finally{document.querySelectorAll('button').forEach(b=>b.disabled=false)}}
+function markUnsub(id){const i=document.querySelector('.item[data-id="'+id+'"]');const b=i&&i.querySelector('button[data-op=unsubscribe]');if(b){b.textContent='Requested';b.dataset.op='';b.disabled=true}}
 document.addEventListener('click',e=>{const b=e.target.closest('button[data-op]');if(!b)return;
+ if(b.dataset.op==='unsub-all'){const ids=b.dataset.ids.split(',');if(confirm('Ask '+ids.length+' senders to unsubscribe you?'))unsubAll(ids);return}
  const ids=b.dataset.ids?b.dataset.ids.split(','):[b.closest('.item').dataset.id];
  if(b.dataset.op==='trash'&&ids.length>5&&!confirm('Trash '+ids.length+' messages?'))return;run(b.dataset.op,ids)});
 sync();
@@ -229,6 +240,26 @@ def _groups(rows, account, b, unsub=False, by_size=True, bulk=()):
     return "".join(cards)
 
 
+BULK_UNSUB_MAX = 25
+
+
+def _unsub_bar(rows):
+    """One-click unsubscribe for every sender in the Noise tab that supports it: one message id per sender."""
+    seen, ids = set(), []
+    for r in rows:
+        key, _ = _sender_key(r)
+        if key not in seen and r.get("unsubscribe_one_click") and (r.get("unsubscribe") or {}).get("http"):
+            seen.add(key)
+            ids.append(r["id"])
+    if not ids:
+        return ""
+    n = len(ids[:BULK_UNSUB_MAX])
+    more = f" (first {BULK_UNSUB_MAX} of {len(ids)})" if len(ids) > BULK_UNSUB_MAX else ""
+    return ('<div class="unsubbar"><span>Senders that accept one-click unsubscribe: '
+            f'<b>{len(ids)}</b>. Tidy asks each one to stop; it cannot confirm they will.</span>'
+            + _btn("unsub-all", f"Unsubscribe from {n} senders{more}", False, ids[:BULK_UNSUB_MAX]) + "</div>")
+
+
 def _fold(title, count, inner, note=""):
     if not count:
         return ""
@@ -254,7 +285,7 @@ def render(rows, applied=False, run_at=None, account=None):
         ("handled", "handled", _groups(by["handled"], account, "handled"), "Nothing archived."),
     ]
     chips = "".join(f'<a href="#{k}" data-b="{k}" aria-selected="false"><b>{len(by[k])}</b> {label}</a>' for k, label, _, _ in panes)
-    body = "\n".join(f'<section class="tab" data-tab="{k}" hidden>' + (f'<div class="grid">{cards}</div>' if cards else f'<div class="empty">{escape(empty)}</div>') + "</section>"
+    body = "\n".join(f'<section class="tab" data-tab="{k}" hidden>' + (_unsub_bar(by["noise"]) if k == "noise" else "") + (f'<div class="grid">{cards}</div>' if cards else f'<div class="empty">{escape(empty)}</div>') + "</section>"
                      for k, _, cards, empty in panes)
     csp = f"default-src 'none'; style-src {_hash(CSS)}; script-src {_hash(JS)}; base-uri 'none'; form-action 'none'; connect-src 'self'"
     return f"""<!doctype html>
