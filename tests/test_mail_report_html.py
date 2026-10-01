@@ -142,3 +142,7 @@ class RenderTests(unittest.TestCase):
         html = m.render([row()])
         self.assertIn("visibilitychange", html)
         self.assertIn('id="refresh"', html)
+
+
+    def test_page_asks_the_server_which_messages_are_already_handled(self):
+        self.assertIn("/api/mail/state", m.render([row()]))

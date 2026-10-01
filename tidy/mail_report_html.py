@@ -136,6 +136,8 @@ document.addEventListener('click',e=>{const b=e.target.closest('button[data-op]'
  const ids=b.dataset.ids?b.dataset.ids.split(','):[b.closest('.item').dataset.id];
  if(b.dataset.op==='trash'&&ids.length>5&&!confirm('Trash '+ids.length+' messages?'))return;run(b.dataset.op,ids)});
 sync();
+// Gmail is the source of truth: what is out of the inbox or kept is hidden on every device, not only the one that clicked.
+fetch('/api/mail/state').then(r=>r.ok?r.json():null).then(j=>{if(j){gone=new Set(j.gone);save();sync()}}).catch(()=>{});
 """ % STALE_HOURS
 
 
