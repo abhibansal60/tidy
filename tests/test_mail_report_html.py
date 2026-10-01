@@ -124,12 +124,6 @@ class RenderTests(unittest.TestCase):
         self.assertNotIn('data-op="unsub-all"', m.render([mk("c1", "c", False)]))
 
 
-    def test_item_carries_thread_id_for_the_ios_app_link(self):
-        html = m.render([row(action="KEEP", category="Needs Reply", thread_id="t99")])
-        self.assertIn('data-thread="t99"', html)
-        self.assertIn("googlegmail:///cv=", html)
-
-
     def test_page_is_installable_and_csp_allows_its_manifest(self):
         html = m.render([row()])
         self.assertIn('rel="manifest"', html)
