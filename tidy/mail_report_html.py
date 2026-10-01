@@ -31,7 +31,7 @@ main{max-width:1180px;margin:0 auto;padding:20px 14px 88px}
 h1{display:inline-block;margin:0 14px 4px 0;font-size:22px;font-weight:650;letter-spacing:-.01em}
 h2{margin:28px 0 8px;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 h2 b{color:var(--ink);font-size:15px;letter-spacing:0;margin-left:6px}
-.nav{display:inline-block}.nav a{color:var(--accent);font-size:14px}
+.nav{display:inline-block}.nav a{color:var(--accent);font-size:14px;margin-right:12px}.nav button{font:inherit;font-size:14px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer}
 .health{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:10px 12px;margin:10px 0 0;border:1px solid var(--line);background:var(--paper);border-radius:10px;font-size:14px;color:var(--muted)}
 .health.stale,.health.dry{background:var(--warnbg);border-color:var(--warn);color:var(--warn)}
 .health.stale{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
@@ -88,6 +88,11 @@ if(t){const hrs=(Date.now()-t)/36e5,when=new Date(t).toLocaleString([],{weekday:
 const tabs=[...document.querySelectorAll('.chips a')],panes=[...document.querySelectorAll('.tab')];
 function show(n){panes.forEach(p=>p.hidden=p.dataset.tab!==n);tabs.forEach(a=>a.setAttribute('aria-selected',a.dataset.b===n))}
 tabs.forEach(a=>a.addEventListener('click',e=>{e.preventDefault();q.value='';q.dispatchEvent(new Event('input'));show(a.dataset.b);history.replaceState(null,'','#'+a.dataset.b)}));
+const born=Date.now();
+// A Home Screen app is suspended, not closed: reload when it comes back after a minute, so it never shows an old run.
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&Date.now()-born>60000)location.reload()});
+addEventListener('pageshow',e=>{if(e.persisted)location.reload()});
+document.getElementById('refresh').addEventListener('click',()=>location.reload());
 const q=document.getElementById('q');
 q.addEventListener('input',()=>{const s=q.value.trim().toLowerCase();
  document.querySelectorAll('.item').forEach(i=>{i.hidden=!!s&&!i.dataset.t.includes(s)});
@@ -296,7 +301,7 @@ def render(rows, applied=False, run_at=None, account=None):
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Mail">
 <meta name="theme-color" content="#1F5FD0">
 <title>Mail</title><style>{CSS}</style></head><body><main>
-<h1>Mail</h1><nav class="nav"><a href="/jobs">Jobs</a></nav>
+<h1>Mail</h1><nav class="nav"><a href="/jobs">Jobs</a><button type="button" id="refresh" aria-label="Refresh">Refresh</button></nav>
 <div id="health" class="{health_cls}" data-run-at="{escape(run_at or '', quote=True)}"><span>Ran <strong data-when>{escape(run_at or 'unknown time')}</strong></span><span data-state>{escape(state)}</span><span>{len(rows)} messages judged by Jev</span></div>
 <div class="chips">{chips}</div>
 <input id="q" type="search" placeholder="Search subject or sender" aria-label="Search subject or sender">

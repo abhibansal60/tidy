@@ -136,3 +136,9 @@ class RenderTests(unittest.TestCase):
         html = m.render(rows)
         self.assertIn('data-op="archive" data-ids="k0,k1,k2">Archive all 3', html)
         self.assertIn('data-op="keep" data-ids="k0,k1,k2">Keep all 3', html)
+
+
+    def test_page_reloads_itself_when_a_suspended_home_screen_app_returns(self):
+        html = m.render([row()])
+        self.assertIn("visibilitychange", html)
+        self.assertIn('id="refresh"', html)
