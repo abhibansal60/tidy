@@ -27,7 +27,7 @@ CSS = """
 @media (prefers-color-scheme:dark){:root{--ground:#0F1218;--paper:#171B23;--ink:#E7EAF0;--muted:#97A1B0;--line:#262C37;--accent:#7FA8FF;--warn:#F0B54A;--warnbg:#2B2410;--bad:#FF8A80;--badbg:#341716;--ok:#6FD3A6;--chip:#212733}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:860px;margin:0 auto;padding:20px 14px 88px}
+main{max-width:1180px;margin:0 auto;padding:20px 14px 88px}
 h1{margin:0 0 4px;font-size:22px;font-weight:650;letter-spacing:-.01em}
 h2{margin:28px 0 8px;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 h2 b{color:var(--ink);font-size:15px;letter-spacing:0;margin-left:6px}
@@ -38,10 +38,13 @@ h2 b{color:var(--ink);font-size:15px;letter-spacing:0;margin-left:6px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
 .chips a{display:inline-flex;gap:6px;align-items:baseline;padding:6px 12px;border-radius:999px;background:var(--chip);color:var(--ink);text-decoration:none;font-size:14px}
 .chips a b{font-variant-numeric:tabular-nums}
-.chips a.hot{background:var(--accent);color:#fff}
 input[type=search]{width:100%;margin:16px 0 0;padding:10px 12px;font:inherit;border:1px solid var(--line);border-radius:10px;background:var(--paper);color:var(--ink)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.card{background:var(--paper);border:1px solid var(--line);border-radius:12px;margin:0 0 10px;overflow:hidden}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start;margin-top:14px}
+.tab[hidden]{display:none}
+.chips a{cursor:pointer}.chips a[aria-selected=true]{background:var(--accent);color:#fff}
+.snip{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .card[hidden],.item[hidden]{display:none}
 .card>header{display:flex;gap:10px;align-items:baseline;justify-content:space-between;padding:12px 14px 6px}
 .card>header b{font-size:15px}.card>header span{color:var(--muted);font-size:13px}
@@ -51,8 +54,8 @@ input[type=search]{width:100%;margin:16px 0 0;padding:10px 12px;font:inherit;bor
 .snip{color:var(--muted);font-size:13.5px;margin:2px 0 6px;overflow-wrap:anywhere}
 .why{font-size:12.5px;color:var(--muted)}
 .why em{font-style:normal;padding:1px 7px;border-radius:999px;background:var(--chip);margin-right:6px}
-.acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
-.acts a{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);text-decoration:none;font-size:14px;font-weight:550}
+.acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.acts a{display:inline-flex;align-items:center;min-height:38px;padding:0 11px;border-radius:9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);text-decoration:none;font-size:14px;font-weight:550}
 .acts a.main{background:var(--accent);border-color:var(--accent);color:#fff}
 .acts .note{align-self:center;font-size:12.5px;color:var(--muted)}
 details.fold{margin:0 0 10px}
@@ -61,7 +64,7 @@ details.fold>summary::-webkit-details-marker{display:none}
 details.fold>summary span{color:var(--muted);font-weight:400;margin-left:8px;font-size:13.5px}
 details.fold[open]>summary{border-bottom-left-radius:0;border-bottom-right-radius:0}
 details.fold>.inner{border:1px solid var(--line);border-top:0;border-radius:0 0 12px 12px;background:var(--paper)}
-.acts button{display:inline-flex;align-items:center;min-height:40px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;font-size:14px;font-weight:550;cursor:pointer}
+.acts button{display:inline-flex;align-items:center;min-height:38px;padding:0 11px;border-radius:9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;font-size:14px;font-weight:550;cursor:pointer}
 .acts button.danger{color:var(--bad)}.acts button:disabled{opacity:.5;cursor:wait}
 .bulk{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 10px}.bulk button{min-height:36px;padding:0 12px;border-radius:9px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;font-size:13.5px;cursor:pointer}
 .bulk button.danger{color:var(--bad)}
@@ -78,11 +81,15 @@ const h=document.getElementById('health'),t=Date.parse(h.dataset.runAt);
 if(t){const hrs=(Date.now()-t)/36e5,when=new Date(t).toLocaleString([],{weekday:'short',hour:'2-digit',minute:'2-digit'});
  h.querySelector('[data-when]').textContent=when;
  if(hrs>%d){h.classList.add('stale');h.querySelector('[data-state]').textContent='STALE: last run was '+Math.round(hrs)+'h ago. The cron may be failing.';}}
+const tabs=[...document.querySelectorAll('.chips a')],panes=[...document.querySelectorAll('.tab')];
+function show(n){panes.forEach(p=>p.hidden=p.dataset.tab!==n);tabs.forEach(a=>a.setAttribute('aria-selected',a.dataset.b===n))}
+tabs.forEach(a=>a.addEventListener('click',e=>{e.preventDefault();q.value='';q.dispatchEvent(new Event('input'));show(a.dataset.b);history.replaceState(null,'','#'+a.dataset.b)}));
 const q=document.getElementById('q');
 q.addEventListener('input',()=>{const s=q.value.trim().toLowerCase();
  document.querySelectorAll('.item').forEach(i=>{i.hidden=!!s&&!i.dataset.t.includes(s)});
  document.querySelectorAll('.card').forEach(c=>{c.hidden=!!s&&!c.querySelector('.item:not([hidden])')});
- if(s)document.querySelectorAll('details.fold,details.more').forEach(d=>d.open=true);});
+ if(s){panes.forEach(p=>p.hidden=false);document.querySelectorAll('details.more').forEach(d=>d.open=true)}else show((tabs.find(a=>a.getAttribute('aria-selected')==='true')||tabs[0]).dataset.b)});
+show((location.hash.slice(1)&&tabs.some(a=>a.dataset.b===location.hash.slice(1)))?location.hash.slice(1):'needs_you');
 
 const key='tidy:'+h.dataset.runAt,toast=document.getElementById('toast');
 let gone=new Set(JSON.parse(localStorage.getItem(key)||'[]')),tt;
@@ -203,7 +210,7 @@ def _bulk(rows, ops):
     return '<div class="bulk">' + "".join(_btn(op, f"{names[op]} {len(ids)}", op == "trash", ids) for op in ops) + "</div>"
 
 
-GROUP_SHOWN = 2  # a sender with many near-identical mails shows its top few; the rest sit behind one fold
+GROUP_SHOWN = 1  # a sender with many near-identical mails shows its top few; the rest sit behind one fold
 
 
 def _groups(rows, account, b, unsub=False, by_size=True, bulk=()):
@@ -236,18 +243,19 @@ def render(rows, applied=False, run_at=None, account=None):
     for r in sorted(rows, key=lambda r: -r["confidence"]):
         by[bucket(r)].append(r)
     done = sum(r.get("outcome") == "applied" for r in rows)
-    mode = ("applied" if applied else "dry")
     state = ("Manual dry run: nothing was changed in Gmail." if not applied else
              f"{done} archived for you. Nothing else was touched." if done else
              "Nothing was actually applied this run (closed gate, cap or a failure).")
     health_cls = "health" + ("" if applied else " dry")
-    needs = (_groups(by["needs_you"], account, "needs_you", by_size=False) if by["needs_you"] else
-             '<div class="empty">Nothing needs you right now.</div>')
-    noise = _groups(by["noise"], account, "noise", unsub=True, bulk=("archive", "trash"))
-    chips = (f'<a class="hot" data-b="needs_you" href="#needs"><b>{len(by["needs_you"])}</b> need you</a>'
-             f'<a data-b="fyi" href="#fyi"><b>{len(by["fyi"])}</b> FYI</a>'
-             f'<a data-b="noise" href="#noise"><b>{len(by["noise"])}</b> noise</a>'
-             f'<a data-b="handled" href="#handled"><b>{len(by["handled"])}</b> handled</a>')
+    panes = [
+        ("needs_you", "need you", _groups(by["needs_you"], account, "needs_you", by_size=False), "Nothing needs you right now."),
+        ("fyi", "FYI", _groups(by["fyi"], account, "fyi", bulk=("archive",)), "No alerts. These are automated bank, payment and system mails that need no decision."),
+        ("noise", "noise", _groups(by["noise"], account, "noise", unsub=True, bulk=("archive", "trash")), "No bulk mail proposed for trash."),
+        ("handled", "handled", _groups(by["handled"], account, "handled"), "Nothing archived."),
+    ]
+    chips = "".join(f'<a href="#{k}" data-b="{k}" aria-selected="false"><b>{len(by[k])}</b> {label}</a>' for k, label, _, _ in panes)
+    body = "\n".join(f'<section class="tab" data-tab="{k}" hidden>' + (f'<div class="grid">{cards}</div>' if cards else f'<div class="empty">{escape(empty)}</div>') + "</section>"
+                     for k, _, cards, empty in panes)
     csp = f"default-src 'none'; style-src {_hash(CSS)}; script-src {_hash(JS)}; base-uri 'none'; form-action 'none'; connect-src 'self'"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -257,13 +265,6 @@ def render(rows, applied=False, run_at=None, account=None):
 <div id="health" class="{health_cls}" data-run-at="{escape(run_at or '', quote=True)}"><span>Ran <strong data-when>{escape(run_at or 'unknown time')}</strong></span><span data-state>{escape(state)}</span><span>{len(rows)} messages judged by Jev</span></div>
 <div class="chips">{chips}</div>
 <input id="q" type="search" placeholder="Search subject or sender" aria-label="Search subject or sender">
-<h2 id="needs">Needs you<b>{len(by["needs_you"])}</b></h2>
-{needs}
-<h2 id="fyi">FYI, no decision needed<b>{len(by["fyi"])}</b></h2>
-{_fold("Bank, payment and system alerts", len(by["fyi"]), _groups(by["fyi"], account, "fyi", bulk=("archive",)), "personally addressed, automated sender") or '<div class="empty">No alerts.</div>'}
-<h2 id="noise">Noise to clear<b>{len(by["noise"])}</b></h2>
-{noise or '<div class="empty">No bulk mail proposed for trash.</div>'}
-<h2 id="handled">Handled<b>{len(by["handled"])}</b></h2>
-{_fold("Archived or queued to archive", len(by["handled"]), _groups(by["handled"], account, "handled")) or '<div class="empty">Nothing archived.</div>'}
+{body}
 </main><div id="toast" role="status" aria-live="polite"></div><script>{JS}</script></body></html>
 """

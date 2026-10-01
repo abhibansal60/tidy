@@ -68,7 +68,7 @@ class RenderTests(unittest.TestCase):
         html = m.render(rows)
         self.assertIn("3 messages", html)
         self.assertEqual(html.count('<section class="card">'), 1)
-        self.assertIn("Show 1 more from Shop", html)
+        self.assertIn("Show 2 more from Shop", html)
 
     def test_health_line_carries_run_time_for_staleness_check(self):
         self.assertIn('data-run-at="2026-10-01T16:51:07+00:00"', m.render([row()], run_at="2026-10-01T16:51:07+00:00"))
