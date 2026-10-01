@@ -94,6 +94,9 @@ q.addEventListener('input',()=>{const s=q.value.trim().toLowerCase();
  if(s){panes.forEach(p=>p.hidden=false);document.querySelectorAll('details.more').forEach(d=>d.open=true)}else show((tabs.find(a=>a.getAttribute('aria-selected')==='true')||tabs[0]).dataset.b)});
 show((location.hash.slice(1)&&tabs.some(a=>a.dataset.b===location.hash.slice(1)))?location.hash.slice(1):'needs_you');
 
+if(/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1))
+ document.querySelectorAll('.item').forEach(i=>{const a=i.querySelector('a.main');if(!a)return;const g=document.createElement('a');g.textContent='Gmail app';
+  g.href='googlegmail:///cv='+encodeURIComponent(i.dataset.thread)+'/accountId=1&create-new-tab';a.after(g)});
 const key='tidy:'+h.dataset.runAt,toast=document.getElementById('toast');
 let gone=new Set(JSON.parse(localStorage.getItem(key)||'[]')),tt;
 const save=()=>{try{localStorage.setItem(key,JSON.stringify([...gone]))}catch(e){}};
@@ -205,7 +208,7 @@ def _item(r, account, unsub=False, b="needs_you"):
     done = DONE_LABEL[r["action"]] if raw_outcome == "applied" and r["action"] in DONE_LABEL else PROPOSED_LABEL[r["action"]]
     status = f" <em>{escape(outcome)}</em>" if outcome else ""
     title = escape((r["subject"] + " " + r["sender"]).lower(), quote=True)
-    return (f'<div class="item" data-id="{escape(r['id'], quote=True)}" data-b="{b}" data-t="{title}"><div class="subj">{subject}</div>'
+    return (f'<div class="item" data-id="{escape(r['id'], quote=True)}" data-thread="{escape(r.get('thread_id') or r['id'], quote=True)}" data-b="{b}" data-t="{title}"><div class="subj">{subject}</div>'
             f'<div class="snip">{sender}: {snippet}</div>'
             f'<div class="why"><em>{escape(r["category"])} {r["confidence"]:.2f}</em>{escape(done)}{status}'
             f'{(" · " + reason) if reason else ""}</div>'
