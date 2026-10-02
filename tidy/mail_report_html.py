@@ -209,7 +209,7 @@ def _item(r, account, unsub=False, b="needs_you"):
     done = DONE_LABEL[r["action"]] if raw_outcome == "applied" and r["action"] in DONE_LABEL else PROPOSED_LABEL[r["action"]]
     status = f" <em>{escape(outcome)}</em>" if outcome else ""
     title = escape((r["subject"] + " " + r["sender"]).lower(), quote=True)
-    return (f'<div class="item" data-id="{escape(r['id'], quote=True)}" data-b="{b}" data-t="{title}"><div class="subj">{subject}</div>'
+    return (f'<div class="item" data-id="{escape(r["id"], quote=True)}" data-b="{b}" data-t="{title}"><div class="subj">{subject}</div>'
             f'<div class="snip">{sender}: {snippet}</div>'
             f'<div class="why"><em>{escape(r["category"])} {r["confidence"]:.2f}</em>{escape(done)}{status}'
             f'{(" · " + reason) if reason else ""}</div>'
