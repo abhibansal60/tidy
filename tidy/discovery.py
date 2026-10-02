@@ -20,9 +20,5 @@ def candidates(db, profile, now=None, limit=30):
 def plan(db, profile, limit=30, window=12, now=None):
     found = candidates(db, profile, now, limit)
     return {"candidates": [{"channel_id": c, "watches": n} for c, n in found],
-            "estimated_units": len(found) * pilot._units_per_channel(window), "executes": False}
+            "estimated_units": len(found) * pilot.units_per_channel(window), "executes": False}
 
-
-def run(db, api, profile, limit=30, window=12, now=None):
-    """Collect evidence for the candidates (read-only API); judge and propose then run as for any sample."""
-    return pilot.run(db, api, [c for c, _ in candidates(db, profile, now, limit)], window, now)

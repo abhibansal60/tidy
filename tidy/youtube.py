@@ -1,22 +1,19 @@
 """Google's OAuth implementation plus GET-only YouTube inventory collection."""
 
 import json
-from pathlib import Path
 import time
 
-from google.auth.transport.requests import AuthorizedSession, Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 import requests
 
-from .store import private_json, required_text
+from .google_oauth import IDENTITY, GoogleOAuth, session_for  # noqa: F401 (session_for re-exported)
+from .store import required_text
 
 
 READ_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
-SCOPES = [READ_SCOPE, "openid", "https://www.googleapis.com/auth/userinfo.email"]
+SCOPES = [READ_SCOPE, *IDENTITY]
 # Write access lives in a separate token, only used by the approved-unsubscribe command.
 WRITE_SCOPE = "https://www.googleapis.com/auth/youtube"
-WRITE_SCOPES = [WRITE_SCOPE, "openid", "https://www.googleapis.com/auth/userinfo.email"]
+WRITE_SCOPES = [WRITE_SCOPE, *IDENTITY]
 API = "https://www.googleapis.com/youtube/v3/"
 USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
 DELETE_COST = 50  # documented quota cost of subscriptions.delete
@@ -31,54 +28,9 @@ class UnknownOutcome(APIError):
     """A mutation may or may not have happened; reconcile before retrying."""
 
 
-def check_scopes(scopes, write=False):
-    scopes = set(scopes or [])
-    need, allowed = (WRITE_SCOPE, WRITE_SCOPES) if write else (READ_SCOPE, SCOPES)
-    if need not in scopes or scopes - set(allowed) - {"email"}:
-        kind = "YouTube write" if write else "read-only YouTube"
-        raise APIError(f"Credential scopes must be {kind} plus email/OpenID. Reauthorize.")
-
-
-def authorize(client_file, expected_email, open_browser=True, write=False):
-    config = json.loads(Path(client_file).read_text())
-    if not isinstance(config, dict) or not isinstance(config.get("installed"), dict):
-        raise ValueError("Expected a Google Desktop OAuth client JSON object.")
-    installed = config.get("installed", {})
-    if (installed.get("auth_uri") not in (
-        "https://accounts.google.com/o/oauth2/auth", "https://accounts.google.com/o/oauth2/v2/auth"
-    ) or installed.get("token_uri") != "https://oauth2.googleapis.com/token"):
-        raise ValueError("Expected a Google Desktop OAuth client JSON with official Google endpoints.")
-    scopes = WRITE_SCOPES if write else SCOPES
-    flow = InstalledAppFlow.from_client_config(config, scopes, autogenerate_code_verifier=True)
-    credentials = flow.run_local_server(
-        host="127.0.0.1", port=0, open_browser=open_browser, timeout_seconds=180,
-        prompt="consent", login_hint=expected_email, include_granted_scopes="false",
-        success_message="Authorization received. Return to the terminal for account verification.",
-    )
-    check_scopes(credentials.granted_scopes or credentials.scopes, write)
-    if not credentials.refresh_token:
-        raise APIError("No refresh token received. Revoke the old grant and authorize again.")
-    return credentials
-
-
-def load_credentials(path, write=False):
-    data = json.loads(Path(path).read_text())
-    if not isinstance(data, dict):
-        raise ValueError("Invalid OAuth credential file; reauthorize.")
-    check_scopes(data.get("scopes"), write)
-    credentials = Credentials.from_authorized_user_info(data)
-    if not credentials.valid:
-        credentials.refresh(Request())
-        save_credentials(path, credentials, write)
-    return credentials
-
-
-def save_credentials(path, credentials, write=False):
-    check_scopes(credentials.granted_scopes or credentials.scopes, write)
-    data = json.loads(credentials.to_json())
-    data["scopes"] = list(credentials.granted_scopes or credentials.scopes)
-    private_json(path, data)
-
+_oauth = GoogleOAuth(READ_SCOPE, WRITE_SCOPE, "read-only YouTube", "YouTube write", APIError)
+check_scopes, authorize = _oauth.check_scopes, _oauth.authorize
+load_credentials, save_credentials = _oauth.load_credentials, _oauth.save_credentials
 
 class YouTube:
     def __init__(self, session, max_units=100):
@@ -217,6 +169,3 @@ class YouTube:
             tokens.add(token)
 
 
-def session_for(credentials):
-    # Make retries visible to our quota counter rather than hide 401 retries.
-    return AuthorizedSession(credentials, max_refresh_attempts=0, refresh_timeout=30)

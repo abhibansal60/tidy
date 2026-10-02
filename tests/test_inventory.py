@@ -183,7 +183,7 @@ class InventoryTests(unittest.TestCase):
         store.private_json(path, {"refresh_token": "replacement"})
         self.assertEqual(json.loads(path.read_text())["refresh_token"], "replacement")
 
-    @patch("tidy.youtube.InstalledAppFlow")
+    @patch("tidy.google_oauth.InstalledAppFlow")
     def test_oauth_uses_loopback_pkce_and_read_only_scopes(self, flow_class):
         path = self.root / "client.json"
         config = {"installed": {"auth_uri": "https://accounts.google.com/o/oauth2/auth",

@@ -74,7 +74,7 @@ const stale=document.getElementById('stale');if(stale&&Date.parse(stale.dataset.
 """
 
 
-def _hash(text):
+def csp_hash(text):
     return "'sha256-" + base64.b64encode(hashlib.sha256(text.encode()).digest()).decode() + "'"
 
 
@@ -103,7 +103,7 @@ def render(proposals, judgments, samples, labels, gate, data_dir=".tidy"):
                  f'<p class="notice" id="stale" data-expires="{escape(expires, quote=True)}" hidden>This page is past its '
                  f'retention date. Delete it and run tidy propose --html again.</p>') if expires else ""
     rows = "\n".join(_row(p, by_s[p.channel_id], by_j[p.channel_id], labels.get(p.channel_id), data_dir) for p in ordered)
-    csp = (f"default-src 'none'; style-src {_hash(CSS)}; script-src {_hash(JS)}; base-uri 'none'; form-action 'none'")
+    csp = (f"default-src 'none'; style-src {csp_hash(CSS)}; script-src {csp_hash(JS)}; base-uri 'none'; form-action 'none'")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{csp}">

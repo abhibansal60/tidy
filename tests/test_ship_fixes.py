@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import Mock, patch
 from types import SimpleNamespace
 
-from tidy import experiment, mutate, profile, store
+from tidy import experiment, mutate, profile, setup_check, store
 from tidy.__main__ import main, run_act
 from tidy.proposal import Proposal
 
@@ -52,7 +52,7 @@ class KeyLookupTests(unittest.TestCase):
             os.chdir(d)
             try:
                 with patch("typesafe_sdk.TypeSafeClient") as client:
-                    experiment.typesafe_client()
+                    setup_check.typesafe_client()
             finally:
                 os.chdir(cwd)
             client.assert_called_once_with(api_key="abc123")

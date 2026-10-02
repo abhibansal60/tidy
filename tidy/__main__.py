@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 from dataclasses import asdict
 import json
 import os
@@ -10,13 +11,7 @@ from google.auth.exceptions import GoogleAuthError
 from oauthlib.oauth2 import OAuth2Error
 import requests
 
-from . import __version__, discovery, escalate, experiment, judge, mail, mail_report_html, mutate, pilot, profile, report_html, review, setup_check, store
-from .gmail import Gmail, parse_list_unsubscribe, parse_message
-from .gmail import APIError as GmailAPIError
-from .gmail import authorize as gmail_authorize
-from .gmail import load_credentials as gmail_load_credentials
-from .gmail import save_credentials as gmail_save_credentials
-from .gmail import session_for as gmail_session_for
+from . import __version__, discovery, escalate, experiment, gmail, judge, mail, mail_report_html, mutate, pilot, profile, report_html, review, setup_check, store
 from .proposal import Proposal
 from .youtube import APIError, YouTube, authorize, load_credentials, save_credentials, session_for
 
@@ -87,6 +82,7 @@ def main(argv=None):
     collect.add_argument("--execute", action="store_true")
     find = commands.add_parser("discover", help="Unsubscribed channels you watch often: dry run by default; --execute collects evidence")
     find.add_argument("--limit", type=int, default=30)
+    find.add_argument("--window", type=int, default=12, help="Latest uploads per channel")
     find.add_argument("--max-units", type=int, default=100)
     find.add_argument("--execute", action="store_true")
     jev = commands.add_parser("judge", help="Schema experiment on stored samples: dry run by default; --execute calls Jev")
@@ -204,7 +200,7 @@ def main(argv=None):
             output = {**pilot.plan(db, args.channels, args.labels if args.labels.is_file() else None, args.window, args.all),
                       "executes": False}
         elif args.command == "discover" and not args.execute:
-            output = discovery.plan(db, profile.load(args.data_dir / "profile.json"), args.limit)
+            output = discovery.plan(db, profile.load(args.data_dir / "profile.json"), args.limit, args.window)
         elif args.command == "judge":
             config = profile.load(args.data_dir / "profile.json")
             habits = args.habits if args.habits is not None else config["viewing_habits"]
@@ -212,7 +208,7 @@ def main(argv=None):
             if not args.execute:
                 output = experiment.plan(db, args.schemas, interests, habits=habits)
             else:
-                with experiment.typesafe_client(args.data_dir) as client:
+                with setup_check.typesafe_client(args.data_dir) as client:
                     output = experiment.run(db, client, args.schemas, interests, habits=habits)
         elif args.command == "unsubscribe" and not args.execute:
             output = mutate.unsubscribe(db, None, None, False)
@@ -236,16 +232,9 @@ def main(argv=None):
                     raise ValueError("Not set up yet. Run: tidy init --email you@gmail.com (then tidy doctor).")
                 config = json.loads(config_file.read_text())
                 email = store.required_text(config.get("mail_email"), "mail_email")
-                write_token_path = args.data_dir / "token_mail_write.json"
-                if not write_token_path.is_file():
-                    raise ValueError("No Gmail write token. Run mail-auth --write first; see README.")
-                credentials = gmail_load_credentials(write_token_path, write=True)
-                with gmail_session_for(credentials) as session:
-                    api = Gmail(session, args.max_calls)
-                    api.identity(email)
+                with gmail.connect(args.data_dir / "token_mail_write.json", email, write=True, max_calls=args.max_calls) as api:
                     valid, outcomes = mail.recheck(api, [(r["id"], r["action"]) for r in eligible])
                     outcomes.update(mail.apply(api, valid))
-                gmail_save_credentials(write_token_path, credentials, write=True)
                 # Persist outcomes back into the run files: a rerun then skips what already succeeded, so it
                 # never re-trashes a message the owner has since manually restored (unless --force-reapply).
                 for r in eligible:  # the selected row objects live inside `docs`, so this updates exactly them
@@ -269,69 +258,24 @@ def main(argv=None):
                 token_path = args.data_dir / ("token_mail_write.json" if args.write else "token_mail.json")
                 if not args.client_secrets.is_file():
                     raise ValueError(f"Google OAuth client JSON not found at {args.client_secrets}. Run: tidy init --email ... --client-secrets PATH")
-                credentials = gmail_authorize(args.client_secrets, email, not args.no_browser, args.write)
-                with gmail_session_for(credentials) as session:
-                    identity = Gmail(session).identity(email)
-                gmail_save_credentials(token_path, credentials, args.write)
+                credentials = gmail.authorize(args.client_secrets, email, not args.no_browser, args.write)
+                with gmail.session_for(credentials) as session:
+                    identity = gmail.Gmail(session).identity(email)
+                gmail.save_credentials(token_path, credentials, args.write)
                 output = {"authorized": True, "write": args.write, **identity}
             else:
-                if args.cap_archive < 0:
-                    raise ValueError("--cap-archive must not be negative.")
-                token_path = args.data_dir / "token_mail.json"
-                if not token_path.is_file():
-                    raise ValueError("No Gmail OAuth token. Run mail-auth first; see README.")
-                credentials = gmail_load_credentials(token_path)
-                with gmail_session_for(credentials) as session:
-                    api = Gmail(session, args.max_calls)
-                    api.identity(email)
-                    messages = [parse_message(api.message(i)) for i in api.message_ids(args.query, args.limit)]
-                gmail_save_credentials(token_path, credentials)
-                with experiment.typesafe_client(args.data_dir) as client:
-                    judgments = mail.classify_batch(client, messages, email, db=db)
-                by_id = {m["id"]: m for m in messages}
-                proposals = {i: mail.propose(j, by_id[i]["label_ids"]) for i, j in judgments.items() if not isinstance(j, str)}
-                gate = mail.gate_status()
-                outcomes = {}
-                if args.apply:
-                    write_token_path = args.data_dir / "token_mail_write.json"
-                    if not write_token_path.is_file():
-                        raise ValueError("No Gmail write token. Run mail-auth --write first; see README.")
-                    write_credentials = gmail_load_credentials(write_token_path, write=True)
-                    with gmail_session_for(write_credentials) as write_session:
-                        write_api = Gmail(write_session, args.max_calls)
-                        write_api.identity(email)
-                        # Auto-apply is archive-only by design: TRASH/SPAM always wait for a reviewed `mail-act` run.
-                        # Per AGENTS.md/ADR 0005, auto-apply also needs the calibration gate open; with no owner
-                        # labels for mail yet it never is, so --override-gate is required (an explicit owner
-                        # decision, not a silent bypass). Capped per ADR 0005 even when overridden.
-                        if gate["open"] or args.override_gate:
-                            auto = [(i, p.action) for i, p in proposals.items() if p.action in mail.AUTO_ACTIONS][:args.cap_archive]
-                            outcomes = mail.apply(write_api, auto)
-                    gmail_save_credentials(write_token_path, write_credentials, write=True)
-                rows = [{"id": i, "thread_id": judgments[i].thread_id, "subject": by_id[i]["subject"],
-                        "sender": by_id[i]["sender"], "snippet": by_id[i]["snippet"], "labels": by_id[i]["label_ids"],
-                        "facts": judgments[i].facts, "category": p.category,
-                        "confidence": judgments[i].confidence, "probabilities": judgments[i].probabilities,
-                        "model": judgments[i].model, "judged_at": judgments[i].judged_at, "usage": judgments[i].usage,
-                        "action": p.action, "policy_version": p.policy_version, "signals": p.signals,
-                        "outcome": (outcomes.get(i, "held" if p.action in mail.EXECUTABLE_ACTIONS else None)
-                                    if args.apply else None),
-                        "unsubscribe": (parse_list_unsubscribe(by_id[i]["list_unsubscribe_value"])
-                                        if by_id[i]["list_unsubscribe"] else None),
-                        "unsubscribe_one_click": by_id[i]["list_unsubscribe_one_click"]}
-                        for i, p in proposals.items()]
+                write = (gmail.connect(args.data_dir / "token_mail_write.json", email, write=True, max_calls=args.max_calls)
+                         if args.apply else contextlib.nullcontext())
+                with gmail.connect(args.data_dir / "token_mail.json", email, max_calls=args.max_calls) as api, \
+                        write as write_api, setup_check.typesafe_client(args.data_dir) as client:
+                    output = mail.triage(api, client, email, args.query, args.limit, db=db, write_api=write_api,
+                                         cap_archive=args.cap_archive, override_gate=args.override_gate)
                 run_at = store.now()
                 if args.html:
-                    store.private_text(args.html, mail_report_html.render(rows, applied=args.apply, run_at=run_at, account=email))
+                    store.private_text(args.html, mail_report_html.render(output["rows"], applied=args.apply, run_at=run_at, account=email))
                 if args.json:
-                    store.private_text(args.json, json.dumps({"run_at": run_at, "mode": "apply" if args.apply else "dry", "query": args.query, "rows": rows, "errors": {i: j for i, j in judgments.items() if isinstance(j, str)}}, indent=1))
-                mutation_errors = {i: v for i, v in outcomes.items() if v != "applied"}
-                output = {"messages": len(messages), "errors": {i: j for i, j in judgments.items() if isinstance(j, str)},
-                          "applied": args.apply, "gate": gate, "gate_overridden": args.apply and not gate["open"] and args.override_gate,
-                          "action_counts": {a: sum(r["action"] == a for r in rows) for a in set(r["action"] for r in rows)},
-                          "outcome_counts": {o: sum(r.get("outcome") == o for r in rows) for o in ("applied", "held")} if args.apply else None,
-                          "mutation_errors": mutation_errors or None, "rows": rows,
-                          "html": str(args.html) if args.html else None, "json": str(args.json) if args.json else None}
+                    store.private_text(args.json, json.dumps({"run_at": run_at, "mode": "apply" if args.apply else "dry", "query": args.query, "rows": output["rows"], "errors": output["errors"]}, indent=1))
+                output.update({"html": str(args.html) if args.html else None, "json": str(args.json) if args.json else None})
         else:
             config_file = args.data_dir / "config.json"
             if not config_file.is_file():
@@ -362,8 +306,8 @@ def main(argv=None):
                                             args.window, args.all)["channels"]
                         output = pilot.run(db, YouTube(session, args.max_units), chosen, args.window)
                     elif args.command == "discover":
-                        output = discovery.run(db, YouTube(session, args.max_units),
-                                               profile.load(args.data_dir / "profile.json"), args.limit)
+                        found = discovery.candidates(db, profile.load(args.data_dir / "profile.json"), limit=args.limit)
+                        output = pilot.run(db, YouTube(session, args.max_units), [c for c, _ in found], args.window)
                     elif args.command in ("act", "resubscribe"):
                         output = run_act(db, YouTube(session, args.max_units), email, args,
                                          profile.load(args.data_dir / "profile.json"))
@@ -377,9 +321,9 @@ def main(argv=None):
     except (GoogleAuthError, OAuth2Error, requests.RequestException):
         print("Google authorization/network failure. Reauthorize if needed; credentials not logged.", file=sys.stderr)
         return 1
-    except (OSError, ValueError, sqlite3.Error, APIError, GmailAPIError) as error:
+    except (OSError, ValueError, sqlite3.Error, APIError, gmail.APIError) as error:
         # Avoid traceback/HTTP bodies, which can expose OAuth callbacks or credentials.
-        message = str(error) if isinstance(error, (ValueError, APIError, GmailAPIError)) else type(error).__name__
+        message = str(error) if isinstance(error, (ValueError, APIError, gmail.APIError)) else type(error).__name__
         if isinstance(error, OSError) and error.filename:  # a path the user typed, never file contents
             message = f"{error.strerror or type(error).__name__}: {error.filename}"
         print(f"Error: {message}", file=sys.stderr)

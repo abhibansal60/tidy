@@ -13,7 +13,7 @@ import json
 from typesafe_sdk import Choice, TypeSafeError
 
 from . import store
-from .gmail import APIError
+from .gmail import APIError, parse_list_unsubscribe, parse_message
 
 SCHEMA_ID = "mail-v2"  # bump if QUESTIONS/_state change, so stale cached judgments never get reused
 RETENTION_DAYS = 30  # same API-derived-data retention as the YouTube side (AGENTS.md)
@@ -265,3 +265,43 @@ def apply(api, pairs):
         except APIError as error:
             outcomes[message_id] = f"error: {error}"
     return outcomes
+
+
+def triage(api, client, owner_email, query, limit, db=None, write_api=None, cap_archive=0, override_gate=False):
+    """One mail-triage run: fetch `query` (up to `limit`), classify, propose, and with `write_api` auto-apply
+    the archive-only proposals. Returns the report rows plus a summary; never trashes or spams on its own.
+
+    Auto-apply is archive-only by design: TRASH/SPAM always wait for a reviewed `mail-act` run. Per AGENTS.md/ADR
+    0005 it also needs the calibration gate open; with no owner labels for mail yet it never is, so
+    `override_gate` is required (an explicit owner decision, not a silent bypass). Capped by `cap_archive` even
+    when overridden."""
+    if cap_archive < 0:
+        raise ValueError("--cap-archive must not be negative.")
+    messages = [parse_message(api.message(i)) for i in api.message_ids(query, limit)]
+    judgments = classify_batch(client, messages, owner_email, db=db)
+    errors = {i: j for i, j in judgments.items() if isinstance(j, str)}
+    by_id = {m["id"]: m for m in messages}
+    proposals = {i: propose(j, by_id[i]["label_ids"]) for i, j in judgments.items() if i not in errors}
+    gate = gate_status()
+    outcomes = {}
+    if write_api is not None and (gate["open"] or override_gate):
+        auto = [(i, p.action) for i, p in proposals.items() if p.action in AUTO_ACTIONS][:cap_archive]
+        outcomes = apply(write_api, auto)
+    applied = write_api is not None
+    rows = []
+    for i, p in proposals.items():
+        m, j = by_id[i], judgments[i]
+        rows.append({
+            "id": i, "thread_id": j.thread_id, "subject": m["subject"], "sender": m["sender"], "snippet": m["snippet"],
+            "labels": m["label_ids"], "facts": j.facts, "category": p.category, "confidence": j.confidence,
+            "probabilities": j.probabilities, "model": j.model, "judged_at": j.judged_at, "usage": j.usage,
+            "action": p.action, "policy_version": p.policy_version, "signals": p.signals,
+            "outcome": outcomes.get(i, "held" if p.action in EXECUTABLE_ACTIONS else None) if applied else None,
+            "unsubscribe": parse_list_unsubscribe(m["list_unsubscribe_value"]) if m["list_unsubscribe"] else None,
+            "unsubscribe_one_click": m["list_unsubscribe_one_click"]})
+    mutation_errors = {i: v for i, v in outcomes.items() if v != "applied"}
+    return {"messages": len(messages), "errors": errors, "applied": applied, "gate": gate,
+            "gate_overridden": applied and not gate["open"] and override_gate,
+            "action_counts": {a: sum(r["action"] == a for r in rows) for a in set(r["action"] for r in rows)},
+            "outcome_counts": {o: sum(r.get("outcome") == o for r in rows) for o in ("applied", "held")} if applied else None,
+            "mutation_errors": mutation_errors or None, "rows": rows}

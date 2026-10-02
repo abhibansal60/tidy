@@ -18,16 +18,6 @@ def plan(db, schema_ids, interests, now=None, habits=""):
             "estimated_input_tokens": chars // 4, "executes": False}
 
 
-def typesafe_client(data_dir=None):
-    """Real client; key from TYPESAFE_API_KEY, else <data dir>/.env, ./.env or ../.env. The key is never printed."""
-    from typesafe_sdk import TypeSafeClient
-    from .setup_check import data_dir as default_dir, typesafe_key
-    key, _ = typesafe_key(data_dir or default_dir())
-    if not key:
-        raise ValueError("TYPESAFE_API_KEY not found. Get one at https://console.typesafe.ai, then: tidy init --email ... --key-stdin")
-    return TypeSafeClient(api_key=key)
-
-
 def _values(answers):
     return {name: ({"score": a["score"], "confidence": a["confidence"]} if "score" in a else {"noul": a["noul"]})
             for name, a in answers.items()}

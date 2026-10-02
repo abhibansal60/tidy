@@ -49,6 +49,15 @@ def typesafe_key(data):
     return None, None
 
 
+def typesafe_client(data=None):
+    """Real client; key from TYPESAFE_API_KEY, else <data dir>/.env, ./.env or ../.env. The key is never printed."""
+    from typesafe_sdk import TypeSafeClient
+    key, _ = typesafe_key(data or data_dir())
+    if not key:
+        raise ValueError("TYPESAFE_API_KEY not found. Get one at https://console.typesafe.ai, then: tidy init --email ... --key-stdin")
+    return TypeSafeClient(api_key=key)
+
+
 def init(data, email, client_file=None, key_stdin=False, mail=True):
     """Create the private data dir, config.json, and optionally copy the OAuth client and store the TypeSafe key.
     Never overwrites an existing config with a different email; never echoes the key."""

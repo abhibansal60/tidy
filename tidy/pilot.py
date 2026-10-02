@@ -7,7 +7,7 @@ from math import ceil
 from . import collector, store
 
 
-def _units_per_channel(window):
+def units_per_channel(window):
     # channels.list + playlistItems pages + videos.list batches, one unit each (lower bound)
     return 1 + 2 * ceil(window / 50)
 
@@ -29,7 +29,7 @@ def plan(db, channel_ids, labels_path, window, all_active=False):
             elif cid not in channels:
                 channels.append(cid)
     return {"channels": channels, "unresolved_labels": unresolved, "window": window,
-            "estimated_units": len(channels) * _units_per_channel(window)}
+            "estimated_units": len(channels) * units_per_channel(window)}
 
 
 def run(db, api, channel_ids, window, now=None):

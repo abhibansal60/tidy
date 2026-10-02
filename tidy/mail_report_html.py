@@ -6,11 +6,11 @@ model is HTML-escaped; the CSP allows only this page's own script and style, by 
 buttons call /api/mail/act on the same origin (the tidy-mail app), which is the only network access the CSP allows.
 """
 
-import base64
 from email.utils import parseaddr
 from html import escape
-import hashlib
 import re
+
+from .report_html import csp_hash
 
 PROPOSED_LABEL = {"REVIEW": "Review", "ARCHIVE": "Archive", "TRASH": "Trash", "SPAM": "Spam", "KEEP": "Keep"}
 DONE_LABEL = {"ARCHIVE": "Archived", "TRASH": "Trashed", "SPAM": "Marked spam"}
@@ -139,10 +139,6 @@ sync();
 // Gmail is the source of truth: what is out of the inbox or kept is hidden on every device, not only the one that clicked.
 fetch('/api/mail/state').then(r=>r.ok?r.json():null).then(j=>{if(j){gone=new Set(j.gone);save();sync()}}).catch(()=>{});
 """ % STALE_HOURS
-
-
-def _hash(text):
-    return "'sha256-" + base64.b64encode(hashlib.sha256(text.encode()).digest()).decode() + "'"
 
 
 def bucket(r):
@@ -295,7 +291,7 @@ def render(rows, applied=False, run_at=None, account=None):
     chips = "".join(f'<a href="#{k}" data-b="{k}" aria-selected="false"><b>{len(by[k])}</b> {label}</a>' for k, label, _, _ in panes)
     body = "\n".join(f'<section class="tab" data-tab="{k}" hidden>' + (_unsub_bar(by["noise"]) if k == "noise" else "") + (f'<div class="grid">{cards}</div>' if cards else f'<div class="empty">{escape(empty)}</div>') + "</section>"
                      for k, _, cards, empty in panes)
-    csp = f"default-src 'none'; style-src {_hash(CSS)}; script-src {_hash(JS)}; base-uri 'none'; form-action 'none'; connect-src 'self'; manifest-src 'self'; img-src 'self'"
+    csp = f"default-src 'none'; style-src {csp_hash(CSS)}; script-src {csp_hash(JS)}; base-uri 'none'; form-action 'none'; connect-src 'self'; manifest-src 'self'; img-src 'self'"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="{csp}">

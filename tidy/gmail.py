@@ -1,25 +1,23 @@
 """Google's OAuth implementation plus Gmail read access and label-only mutation (archive, spam). No sends or deletes."""
 
 import base64
+from contextlib import contextmanager
 from html import unescape
-import json
 from pathlib import Path
 import re
 import time
 
-from google.auth.transport.requests import AuthorizedSession, Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 import requests
 
-from .store import private_json, required_text
+from .google_oauth import IDENTITY, GoogleOAuth, session_for
+from .store import required_text
 
 
 READ_SCOPE = "https://www.googleapis.com/auth/gmail.readonly"
-SCOPES = [READ_SCOPE, "openid", "https://www.googleapis.com/auth/userinfo.email"]
+SCOPES = [READ_SCOPE, *IDENTITY]
 # Write access (label changes only: archive, spam) lives in a separate token, same split as tidy/youtube.py.
 WRITE_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
-WRITE_SCOPES = [WRITE_SCOPE, "openid", "https://www.googleapis.com/auth/userinfo.email"]
+WRITE_SCOPES = [WRITE_SCOPE, *IDENTITY]
 API = "https://gmail.googleapis.com/gmail/v1/users/me/"
 USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
 
@@ -62,54 +60,9 @@ def _retry_delay(response):
     return 65 if response.status_code == 403 else 2  # per-minute quota resets; short backoff won't help a 403
 
 
-def check_scopes(scopes, write=False):
-    scopes = set(scopes or [])
-    need, allowed = (WRITE_SCOPE, WRITE_SCOPES) if write else (READ_SCOPE, SCOPES)
-    if need not in scopes or scopes - set(allowed) - {"email"}:
-        kind = "Gmail modify (labels only)" if write else "read-only Gmail"
-        raise APIError(f"Credential scopes must be {kind} plus email/OpenID. Reauthorize.")
-
-
-def authorize(client_file, expected_email, open_browser=True, write=False):
-    config = json.loads(Path(client_file).read_text())
-    if not isinstance(config, dict) or not isinstance(config.get("installed"), dict):
-        raise ValueError("Expected a Google Desktop OAuth client JSON object.")
-    installed = config.get("installed", {})
-    if (installed.get("auth_uri") not in (
-        "https://accounts.google.com/o/oauth2/auth", "https://accounts.google.com/o/oauth2/v2/auth"
-    ) or installed.get("token_uri") != "https://oauth2.googleapis.com/token"):
-        raise ValueError("Expected a Google Desktop OAuth client JSON with official Google endpoints.")
-    scopes = WRITE_SCOPES if write else SCOPES
-    flow = InstalledAppFlow.from_client_config(config, scopes, autogenerate_code_verifier=True)
-    credentials = flow.run_local_server(
-        host="127.0.0.1", port=0, open_browser=open_browser, timeout_seconds=180,
-        prompt="consent", login_hint=expected_email, include_granted_scopes="false",
-        success_message="Authorization received. Return to the terminal for account verification.",
-    )
-    check_scopes(credentials.granted_scopes or credentials.scopes, write)
-    if not credentials.refresh_token:
-        raise APIError("No refresh token received. Revoke the old grant and authorize again.")
-    return credentials
-
-
-def load_credentials(path, write=False):
-    data = json.loads(Path(path).read_text())
-    if not isinstance(data, dict):
-        raise ValueError("Invalid OAuth credential file; reauthorize.")
-    check_scopes(data.get("scopes"), write)
-    credentials = Credentials.from_authorized_user_info(data)
-    if not credentials.valid:
-        credentials.refresh(Request())
-        save_credentials(path, credentials, write)
-    return credentials
-
-
-def save_credentials(path, credentials, write=False):
-    check_scopes(credentials.granted_scopes or credentials.scopes, write)
-    data = json.loads(credentials.to_json())
-    data["scopes"] = list(credentials.granted_scopes or credentials.scopes)
-    private_json(path, data)
-
+_oauth = GoogleOAuth(READ_SCOPE, WRITE_SCOPE, "read-only Gmail", "Gmail modify (labels only)", APIError)
+check_scopes, authorize = _oauth.check_scopes, _oauth.authorize
+load_credentials, save_credentials = _oauth.load_credentials, _oauth.save_credentials
 
 class Gmail:
     def __init__(self, session, max_calls=1200):
@@ -235,9 +188,22 @@ class Gmail:
             raise APIError(f"API returned HTTP {response.status_code}; trash may be partial. Rerun is safe.")
 
 
-def session_for(credentials):
-    # Make retries visible to our call counter rather than hide 401 retries.
-    return AuthorizedSession(credentials, max_refresh_attempts=0, refresh_timeout=30)
+
+
+@contextmanager
+def connect(token_path, expected_email=None, write=False, max_calls=1200):
+    """A `Gmail` on the saved token: verifies the account when `expected_email` is given, and saves the token
+    again on a clean exit so a refreshed access token is kept. Missing token -> ValueError naming the fix."""
+    if not Path(token_path).is_file():
+        raise ValueError("No Gmail write token. Run mail-auth --write first; see README." if write else
+                         "No Gmail OAuth token. Run mail-auth first; see README.")
+    credentials = load_credentials(token_path, write)
+    with session_for(credentials) as session:
+        api = Gmail(session, max_calls)
+        if expected_email:
+            api.identity(expected_email)
+        yield api
+    save_credentials(token_path, credentials, write)
 
 
 def _header(headers, name):

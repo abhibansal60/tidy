@@ -2,14 +2,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from typesafe_sdk import ChoiceAnswer, SystemOneResponse, TypeSafeError, Usage
 
 from tidy import store
 from tidy.gmail import APIError
 from tidy.mail import (ACTION_FOR_CATEGORY, CATEGORIES, MailProposal, apply, classify, classify_batch,
-                       evidence_hash, gate_status, propose, recheck, select_held)
+                       evidence_hash, gate_status, propose, recheck, select_held, triage)
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
