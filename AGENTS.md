@@ -21,6 +21,8 @@ is not tracked. It does not override the decisions below.
   read and `gmail.modify` tokens are separate, only corroborated ARCHIVE auto-applies (and only with
   `--override-gate` until a mail gate exists), TRASH/SPAM wait for `mail-act` with a live recheck, starred
   mail is never touched, and nothing ever requests a scope that can permanently delete mail.
+  The mail dashboard page is rendered here (`tidy/mail_report_html.py`) but served, with its Gmail action
+  routes, by the private Next app `~/code/tidy-mail` at mail.abhibansal.dev (see its AGENTS.md).
 - Published to PyPI as `tidy-ai` (commands `tidy` and `tidy-ai`). Data defaults to `~/.tidy` outside a
   checkout (see `tidy/setup_check.py`). Everything written to the data folder or as a report is 0600.
 - Jev supplies typed judgments. Code owns arithmetic, dates, persistence, policy,
