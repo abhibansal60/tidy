@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.3 (2026-10-02)
+
+- **Mail dashboard:** grouped by what needs you (Needs you, FYI, Noise, Handled) as tabs and a card grid, with
+  per-message and bulk action buttons, undo, and bulk one-click unsubscribe from the Noise tab. The buttons call a
+  same-origin `/api/mail/act` endpoint (a hosted app such as tidy-mail); opened as a plain file the page is read-only.
+  The page reloads when a Home Screen app resumes, has a Refresh button, and hides messages Gmail has already handled.
+- **Mail:** optional push summary after the daily run via ntfy (`python -m tidy.notify`).
+- `discover` takes `--window` (latest uploads per channel), like `collect`.
+- Internal: Gmail and YouTube share one Google OAuth module; the mail-triage run is a library function
+  (`mail.triage`) with its own tests; `gmail.connect()` loads, verifies and saves a token in one step.
+
 ## 0.2.2 (2026-09-27)
 
 - **Mail:** new `Action Needed` category (kept in the inbox) for automated mail that asks you to do something or warns
