@@ -6,7 +6,7 @@ You are working in the repository root (the Tidy app). Tidy judges YouTube chann
 - `evals/claude_baseline.py`: the Claude runner. Reuse `prompt_for` and `OUTPUT_SCHEMA` from it so every model gets exactly the same prompt, rubric text and JSON schema. Do not reword the prompt.
 - `tidy/judge.py`: `QUESTIONS` and `_state` (how evidence is rendered). Use `titles-v1` rendering: `judge._state(sample, judge.DEFAULT_INTERESTS, False)`.
 - `evals/compare.py` and `evals/repeat.py`: how results are read and compared.
-- `AGENTS.md` and `CONTEXT.md`: binding rules and vocabulary.
+- `AGENTS.md` and `GLOSSARY.md`: binding rules and vocabulary.
 
 ## Models
 Run these two: **Sol** and **Astra** (use the exact model IDs Codex exposes; list them with the CLI's model listing or `codex --help`). If either name does not match a model you can select, stop and ask the owner; do not substitute another model.

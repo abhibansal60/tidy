@@ -27,7 +27,7 @@ is not tracked. It does not override the decisions below.
   checkout (see `tidy/setup_check.py`). Everything written to the data folder or as a report is 0600.
 - Jev supplies typed judgments. Code owns arithmetic, dates, persistence, policy,
   and side effects. Preserve raw answers and evidence provenance in future work.
-- Vocabulary is in `CONTEXT.md`; reasons for the big decisions are in `docs/adr/`.
+- Vocabulary is in `GLOSSARY.md`; reasons for the big decisions are in `docs/adr/`.
 - Jev is the judge and the reason automation is cheap and fast: one bundled call
   per evidence sample, compact evidence, judgments cached by evidence hash
   (ADR 0004). Do not add heuristic quality scores beside it.

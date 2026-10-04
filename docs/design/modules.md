@@ -1,6 +1,6 @@
 # Module seams
 
-Design target: three deep modules (collector, judge, policy), each with a one-function interface, plus the existing store, YouTube transport and mutation modules. Vocabulary: `CONTEXT.md`. Depth terms follow the codebase-design skill.
+Design target: three deep modules (collector, judge, policy), each with a one-function interface, plus the existing store, YouTube transport and mutation modules. Vocabulary: `GLOSSARY.md`. Depth terms follow the codebase-design skill.
 
 ## Deep modules
 
