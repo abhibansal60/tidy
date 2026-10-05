@@ -7,8 +7,8 @@ cryptography==50.0.1
 google-auth==2.58.1
 google-auth-oauthlib==1.4.1
 h11==0.16.0
-httpcore2==2.13.0
-httpx2==2.13.0
+httpcore2==2.13.1
+httpx2==2.13.1
 idna==3.20
 oauthlib==4.0.0
 pyasn1==0.6.4
