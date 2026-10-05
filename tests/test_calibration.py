@@ -44,6 +44,10 @@ class CalibrationMetricTests(unittest.TestCase):
         self.assertEqual(gate["b_coverage"], 0.75)
         self.assertAlmostEqual(gate["b_error"], 1 / 3)
 
+    def test_risk_coverage_answers_most_confident_first_and_keeps_ties_together(self):
+        curve = cal.risk_coverage([0.9, 0.5, 0.9, 0.2], [True, False, False, True])
+        self.assertEqual(curve, [(0.5, 0.5), (0.75, 2 / 3), (1.0, 0.5)])
+
     def test_bootstrap_interval_brackets_the_estimate(self):
         correct = [True] * 80 + [False] * 20
         lo, hi = cal.bootstrap(correct, cal.accuracy)

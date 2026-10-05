@@ -79,3 +79,14 @@ def repeatability(first, second):
     return {"items": len(ids),
             "label_agreement": accuracy([first[k][0] == second[k][0] for k in ids]),
             "mean_abs_change": round(statistics.mean(abs(first[k][1] - second[k][1]) for k in ids), 4)}
+
+
+def risk_coverage(conf, correct):
+    """(coverage, error among answered) at every distinct threshold, most confident answered first."""
+    pairs = sorted(zip(conf, correct), key=lambda x: -x[0])
+    curve, wrong = [], 0
+    for k, (c, ok) in enumerate(pairs, 1):
+        wrong += not ok
+        if k == len(pairs) or pairs[k][0] != c:
+            curve.append((k / len(pairs), wrong / k))
+    return curve
