@@ -298,7 +298,7 @@ Plain-language version, for people who have never heard of Jev:
 > GitHub bug reports: Jev said "99% sure" on almost two thirds of them and was right on only 81% of those. Being
 > sure did not mean being right.
 >
-> The surprise: a simple word-counting model with no AI at all, trained on public examples, did as well or better
-> on both.
+> The surprise: a simple word-counting model with no AI at all, trained on public examples, beat Jev on the bank
+> messages and tied it on the GitHub issues.
 >
 > Lesson: Jev is fast, cheap and steady, but check its confidence on your own examples before you let it act alone.

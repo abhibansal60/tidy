@@ -1,0 +1,275 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+@font-face{font-family:'Inter';font-weight:100 900;src:url(assets/Inter.woff2) format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-weight:100 800;src:url(assets/JetBrainsMono.woff2) format('woff2')}
+html,body{margin:0;background:#0F1A16}canvas{display:block;max-width:100vw;max-height:100vh}
+</style>
+<canvas id="c"></canvas>
+<img id="mascot" src="assets/tidy-mascot.png" style="display:none">
+<script src="motion.js"></script>
+<script src="data.js"></script>
+<script>
+// "Is it right when it says it is sure?" Every number comes from data.js (the audit runs). Shot list: docs/shotlist.md
+const q = new URLSearchParams(location.search);
+const W = Number(q.get('w') || 1080), H = Number(q.get('h') || 1920), DUR = 35;
+const cv = document.getElementById('c');
+cv.width = W; cv.height = H;
+const g = cv.getContext('2d');
+const U = Math.min(W, H) / 1080;
+const WIDE = W > H;
+const D = window.DATA;
+const BG = '#0F1A16', INK = '#F5F7FA', MUTED = '#8FA39A', MINT = '#3DDC97', RED = '#FF5C5C',
+      CARD = '#16261F', LINE = '#24392F', DIM = '#5E7268';
+const pct = (x, dp = 0) => `${(x * 100).toFixed(dp)}%`;
+const CX = W / 2;
+// vertical rhythm: 9:16 has room, 16:9 compresses around the middle
+const Y = (f) => WIDE ? H * (0.5 + (f - 0.5) * 0.92) : H * f;
+
+function font(sz, w = 800, mono = false) { g.font = `${w} ${sz * U}px ${mono ? '"JetBrains Mono"' : 'Inter'}`; }
+
+// Text that rises out of a mask line, and leaves upward. No fades.
+function rise(str, x, y, sz, t, t0, o = {}) {
+  const { w = 800, c = INK, al = 'center', mono = false, t1 = 1e9 } = o;
+  const s = spring(t - t0, 170, 24), out = spring(t - t1, 320, 30);
+  if (s <= 0.001 || out >= 0.999) return;
+  font(sz, w, mono);
+  g.save();
+  g.beginPath(); g.rect(0, y - sz * U * 1.05, W, sz * U * 1.35); g.clip();
+  g.fillStyle = c; g.textAlign = al; g.textBaseline = 'alphabetic';
+  g.fillText(str, x, y + (1 - s) * sz * U * 1.2 - out * sz * U * 1.3);
+  g.restore();
+}
+
+function wrap(str, maxW) {
+  const words = str.split(' '), lines = [];
+  let line = '';
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (g.measureText(test).width > maxW && line) { lines.push(line); line = w; } else line = test;
+  }
+  return [...lines, line];
+}
+
+function rrect(x, y, w, h, r, fill, stroke) {
+  g.beginPath(); g.roundRect(x, y, w, h, r);
+  if (fill) { g.fillStyle = fill; g.fill(); }
+  if (stroke) { g.strokeStyle = stroke; g.lineWidth = 3 * U; g.stroke(); }
+}
+
+function check(x, y, r, s, color) {           // circle badge with a drawn tick
+  g.save(); g.translate(x, y); g.scale(s, s);
+  g.beginPath(); g.arc(0, 0, r, 0, Math.PI * 2); g.fillStyle = color; g.fill();
+  g.strokeStyle = BG; g.lineWidth = r * 0.22; g.lineCap = 'round'; g.lineJoin = 'round';
+  g.beginPath(); g.moveTo(-r * 0.42, 0); g.lineTo(-r * 0.1, r * 0.32); g.lineTo(r * 0.45, -r * 0.35); g.stroke();
+  g.restore();
+}
+
+function waffle(t, cx, cy, right, color, t0) {  // 10 x 10: `right` mint squares, the rest red
+  const cell = Math.min(W * 0.072, H * 0.042), gap = cell * 0.18, size = cell - gap;
+  const x0 = cx - (10 * cell - gap) / 2, y0 = cy - (10 * cell - gap) / 2;
+  for (let i = 0; i < 100; i++) {
+    const s = spring(t - t0 - i * 0.008, 320, 30), h = size * s;
+    const x = x0 + (i % 10) * cell + (size - h) / 2, y = y0 + Math.floor(i / 10) * cell + (size - h) / 2;
+    g.beginPath(); g.roundRect(x, y, h, h, 6 * U * s);
+    g.fillStyle = i < right ? color : RED; g.fill();
+  }
+  return y0 + 10 * cell;
+}
+
+function hbar(t, t0, x, y, wMax, h, frac, color, label, value) {
+  const s = spring(t - t0, 170, 26);
+  rrect(x, y, Math.max(h, wMax * frac * s), h, h / 2, color);
+  font(44, 600); g.fillStyle = INK; g.textAlign = 'left';
+  g.fillText(label, x, y - 16 * U);
+  font(50, 700, true); g.textAlign = 'right'; g.fillStyle = INK;
+  if (s > 0.05) g.fillText(value, x + wMax, y - 14 * U);
+}
+
+const SCENES = [
+  { from: 0, to: 3, draw(t) {                                   // hook
+      const cy = Y(0.45), r = 270 * U, s = spring(t + 0.12, 60, 14);
+      const v = Math.round(99 * clamp(s));
+      g.lineWidth = 30 * U; g.lineCap = 'round';
+      g.strokeStyle = LINE; g.beginPath(); g.arc(CX, cy, r, 0, Math.PI * 2); g.stroke();
+      g.strokeStyle = MINT; g.beginPath(); g.arc(CX, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * 0.99 * clamp(s)); g.stroke();
+      font(190, 700, true); g.fillStyle = INK; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(`${v}%`, CX, cy + 8 * U); g.textBaseline = 'alphabetic';
+      rise('This AI says it is', CX, cy - r - 100 * U, 88, t, -0.12, { w: 800 });
+      rise('sure.', CX, cy + r + 140 * U, 110, t, 0.75, { t1: 1.85 });
+      rise('Is it right?', CX, cy + r + 140 * U, 110, t, 2.0);
+      const u = spring(t - 2.25, 320, 30);
+      if (u > 0) { font(110); const tw = g.measureText('Is it right?').width;
+        rrect(CX - tw / 2, cy + r + 170 * U, tw * u, 14 * U, 7 * U, RED); }
+  }},
+  { from: 3, to: 6, draw(t) {                                   // 1,000 examples
+      const cols = 40, rows = 25, cell = Math.min(W * 0.84 / cols, H * 0.33 / rows);
+      const gx = CX - cols * cell / 2, gy = Y(0.47) - rows * cell / 2;
+      let shown = 0;
+      for (let i = 0; i < 1000; i++) {
+        const c = i % cols, rr = Math.floor(i / cols);
+        const s = spring(t + 0.06 - (c + rr) * 0.014, 320, 30);
+        if (s > 0.5) shown++;
+        g.beginPath(); g.arc(gx + (c + 0.5) * cell + (c >= 20 ? cell * 0.6 : 0) - cell * 0.3, gy + (rr + 0.5) * cell,
+                             cell * 0.34 * clamp(s, 0, 1.2), 0, Math.PI * 2);
+        g.fillStyle = c < 20 ? INK : MINT; g.fill();
+      }
+      font(170, 700, true); g.fillStyle = INK; g.textAlign = 'center';
+      g.fillText(shown.toLocaleString('en-US'), CX, gy - 150 * U);
+      rise('real examples. Right answers known.', CX, gy - 60 * U, 52, t, 0.4, { w: 600, c: MUTED });
+      const by = gy + rows * cell + 80 * U;
+      rise('500 bank chats', gx + cols * cell * 0.25, by, 50, t, 1.3, { w: 700 });
+      rise('500 GitHub issues', gx + cols * cell * 0.75, by, 50, t, 1.45, { w: 700, c: MINT });
+  }},
+  { from: 6, to: 10, draw(t) {                                  // test 1 example
+      const ex = D.examples.bank, x = W * 0.09, bw = W * 0.82;
+      rise('TEST 1 · BANK CUSTOMER MESSAGES', CX, Y(0.2), 40, t, -0.1, { w: 700, c: MUTED, mono: true });
+      const s = spring(t + 0.05, 170, 26), by = Y(0.29);
+      if (s > 0) {
+        rrect(x, by, bw * s, 150 * U, 36 * U, CARD);
+        const n = Math.floor(clamp((t - 0.2) * 30, 0, ex.text.length));
+        font(54, 600); g.fillStyle = INK; g.textAlign = 'left';
+        g.fillText(ex.text.slice(0, n) + (n < ex.text.length && (t * 4) % 1 < 0.5 ? '|' : ''), x + 44 * U, by + 92 * U);
+      }
+      const cs = spring(t - 1.7, 170, 22), cy = Y(0.42);
+      if (cs > 0) {
+        const cx = x + (1 - cs) * W * 0.6;
+        rrect(cx, cy, bw, 300 * U, 36 * U, null, MINT);
+        font(36, 700, true); g.fillStyle = MUTED; g.textAlign = 'left';
+        g.fillText('JEV SAYS', cx + 44 * U, cy + 70 * U);
+        font(48, 700, true); g.fillStyle = MINT; g.fillText(ex.jev, cx + 44 * U, cy + 150 * U);
+        font(76, 800); g.fillStyle = INK; g.fillText(`${pct(ex.prob)} sure`, cx + 44 * U, cy + 250 * U);
+      }
+      const k = spring(t - 2.7, 220, 12);
+      if (k > 0) check(x + bw - 90 * U, Y(0.42) + 210 * U, 62 * U, k, MINT);
+      rise('Right.', CX, Y(0.64), 96, t, 2.8);
+  }},
+  { from: 10, to: 13.5, draw(t) {                               // accuracy
+      rise('On 500 bank messages, Jev was', CX, Y(0.24), 54, t, -0.1, { w: 600, c: MUTED });
+      const s = spring(t + 0.05, 90, 20);
+      font(250, 700, true); g.fillStyle = INK; g.textAlign = 'center';
+      g.fillText(pct(D.bank.jev * clamp(s)), CX, Y(0.37));
+      rise('right.', CX, Y(0.44), 80, t, 0.6);
+      const x = W * 0.12, wMax = W * 0.76;
+      hbar(t, 0.7, x, Y(0.55), wMax, 44 * U, D.bank.jev, MINT, 'Jev', pct(D.bank.jev, 1));
+      hbar(t, 0.85, x, Y(0.64), wMax, 44 * U, D.bank.haiku, DIM, 'Claude Haiku 4.5', pct(D.bank.haiku, 1));
+      rise('Same as Claude Haiku.', CX, Y(0.76), 70, t, 2.0);
+  }},
+  { from: 13.5, to: 18, draw(t) {                               // speed and cost
+      rise('Time per answer', CX, Y(0.2), 54, t, -0.1, { w: 600, c: MUTED });
+      const x = W * 0.12, wMax = W * 0.76, h = 44 * U;
+      const virt = Math.max(0, t - 0.25) * 4.2;                  // 4.2 s of wall clock per real second
+      font(120, 700, true); g.fillStyle = INK; g.textAlign = 'center';
+      g.fillText(`${Math.min(virt, D.haiku_api_ms_p50 / 1000).toFixed(1)} s`, CX, Y(0.31));
+      const lanes = [['Jev', D.jev_ms_p50, MINT, Y(0.41)], ['Claude Haiku 4.5', D.haiku_api_ms_p50, DIM, Y(0.5)]];
+      for (const [name, ms, color, y] of lanes) {
+        const f = clamp(virt / (ms / 1000));
+        rrect(x, y, wMax, h, h / 2, LINE);
+        rrect(x, y, Math.max(h, wMax * f), h, h / 2, color);
+        font(44, 600); g.fillStyle = INK; g.textAlign = 'left'; g.fillText(name, x, y - 16 * U);
+        if (f >= 1) { font(50, 700, true); g.textAlign = 'right'; g.fillText(`${(ms / 1000).toFixed(2).replace(/0$/, '')} s`, x + wMax, y - 14 * U); }
+      }
+      rise('About 20x faster.', CX, Y(0.64), 92, t, 2.5);
+      rise(`4¢ vs $${D.haiku_usd_per_1000_bank_estimate} per 1,000 messages`, CX, Y(0.71), 50, t, 2.9, { w: 700, c: MINT, mono: true });
+      rise('Median time per answer.', CX, Y(0.8), 34, t, 3.0, { w: 500, c: MUTED });
+      rise('Haiku 4.5 via Claude Code, thinking on.', CX, Y(0.8) + 48 * U, 34, t, 3.05, { w: 500, c: MUTED });
+      rise('Haiku cost estimated at list price.', CX, Y(0.8) + 96 * U, 34, t, 3.1, { w: 500, c: MUTED });
+  }},
+  { from: 18, to: 21.5, draw(t) {                               // trust holds
+      rise('When Jev said 99% or more', CX, Y(0.2), 66, t, -0.1, { w: 800 });
+      rise('on bank messages:', CX, Y(0.2) + 84 * U, 54, t, 0.05, { w: 600, c: MUTED });
+      const n = Math.round(D.sure_bank.right * 100);
+      const bottom = waffle(t, CX, Y(0.48), n, MINT, 0.15);
+      rise(`${n} of 100 were right.`, CX, bottom + 120 * U, 80, t, 1.6);
+      rise('So far, the claim holds.', CX, bottom + 210 * U, 56, t, 2.1, { w: 600, c: MINT });
+  }},
+  { from: 21.5, to: 24.5, draw(t) {                             // twist: a real issue
+      const ex = D.examples.issue, x = W * 0.09, bw = W * 0.82;
+      rise('TEST 2 · GITHUB ISSUES', CX, Y(0.17), 40, t, -0.12, { w: 700, c: MUTED, mono: true });
+      rise('Bug, feature or question?', CX, Y(0.17) + 90 * U, 70, t, -0.02);
+      const s = spring(t - 0.15, 170, 26), cy = Y(0.3);
+      if (s > 0) {
+        g.save(); g.translate(0, (1 - s) * 80 * U);
+        rrect(x, cy, bw, 250 * U, 36 * U, CARD);
+        font(38, 500, true); g.fillStyle = MUTED; g.textAlign = 'left'; g.fillText(ex.repo, x + 44 * U, cy + 64 * U);
+        font(50, 600); g.fillStyle = INK;
+        wrap(ex.title, bw - 88 * U).forEach((l, i) => g.fillText(l, x + 44 * U, cy + 135 * U + i * 64 * U));
+        g.restore();
+      }
+      rise(`Jev: feature request, ${pct(ex.prob)} sure`, CX, Y(0.5), 52, t, 1.0, { w: 700, c: MINT });
+      const k = spring(t - 1.7, 220, 12);
+      if (k > 0) {
+        g.save(); g.translate(CX, Y(0.6)); g.rotate(-0.06); g.scale(1.6 - 0.6 * k, 1.6 - 0.6 * k);
+        g.globalAlpha = clamp(k * 3);
+        font(52, 800); const label = 'Maintainers labeled it: question', tw = g.measureText(label).width;
+        rrect(-tw / 2 - 36 * U, -62 * U, tw + 72 * U, 96 * U, 18 * U, null, RED);
+        g.fillStyle = RED; g.textAlign = 'center'; g.fillText(label, 0, 4 * U);
+        g.restore();
+      }
+      rise('A borderline call. Still 100% sure.', CX, Y(0.72), 56, t, 2.2, { w: 600, c: MUTED });
+  }},
+  { from: 24.5, to: 28, draw(t) {                               // trust breaks
+      rise('When Jev said 99% or more', CX, Y(0.2), 66, t, -0.1, { w: 800 });
+      rise('on GitHub issues:', CX, Y(0.2) + 84 * U, 54, t, 0.05, { w: 600, c: MUTED });
+      const n = Math.round(D.sure_issues.right * 100);
+      const bottom = waffle(t, CX, Y(0.48), n, MINT, 0.15);
+      rise(`Only ${n} of 100 were right.`, CX, bottom + 120 * U, 76, t, 1.6);
+      rise(`And it said 99%+ on ${pct(D.sure_issues.share)} of issues.`, CX, bottom + 210 * U, 52, t, 2.1, { w: 600, c: RED });
+  }},
+  { from: 28, to: 31, draw(t) {                                 // surprise
+      rise('The surprise:', CX, Y(0.17), 56, t, -0.1, { w: 600, c: MUTED });
+      rise('a simple word-counting model', CX, Y(0.17) + 90 * U, 68, t, 0.0);
+      rise('with no chat AI inside.', CX, Y(0.17) + 172 * U, 68, t, 0.12);
+      const groups = [['Bank chats', D.bank], ['GitHub issues', D.issues]];
+      const base = Y(0.68), hMax = H * (WIDE ? 0.26 : 0.24), bw = W * 0.12;
+      groups.forEach(([name, d], gi) => {
+        const gx = W * (gi ? 0.68 : 0.32);
+        [['Jev', d.jev, MINT], ['Word counter', d.tfidf, INK]].forEach(([lab, v, col], bi) => {
+          const s = spring(t - 0.35 - gi * 0.25 - bi * 0.1, 170, 26), x = gx + (bi ? 0.08 : -1.08) * bw;
+          const hh = hMax * v * s;
+          rrect(x, base - hh, bw, hh, 10 * U, col);
+          font(38, 700, true); g.fillStyle = INK; g.textAlign = 'center';
+          if (s > 0.1) g.fillText(pct(v * clamp(s)), x + bw / 2, base - hh - 20 * U);
+        });
+        font(44, 700); g.fillStyle = INK; g.textAlign = 'center'; g.fillText(name, gx, base + 64 * U);
+      });
+      const ls = spring(t - 0.3, 170, 26);              // legend instead of per-bar labels
+      if (ls > 0) [['Jev', MINT], ['Word counter', INK]].forEach(([lab, col], i) => {
+        const lx = W * (i ? 0.52 : 0.26), ly = Y(0.38);
+        g.globalAlpha = clamp(ls * 2);
+        rrect(lx, ly - 30 * U, 36 * U, 36 * U, 8 * U, col);
+        font(44, 700); g.fillStyle = INK; g.textAlign = 'left'; g.fillText(lab, lx + 54 * U, ly);
+        g.globalAlpha = 1;
+      });
+      rise('Tied on issues. Won on bank chats.', CX, Y(0.86), 60, t, 1.5, { w: 700, c: MINT });
+  }},
+  { from: 31, to: 35, draw(t) {                                 // takeaway
+      rise('Jev: fast, cheap, steady.', CX, Y(0.3), 80, t, -0.1);
+      rise('Its confidence is a hint.', CX, Y(0.3) + 110 * U, 76, t, 0.6, { c: MINT });
+      rise('Test it on your own examples first.', CX, Y(0.3) + 220 * U, 58, t, 1.2, { w: 600 });
+      const m = document.getElementById('mascot'), s = spring(t - 1.9, 220, 12);
+      if (s > 0 && m.complete) {
+        const sz = 320 * U * s;
+        g.drawImage(m, CX - sz / 2, Y(0.66) - sz / 2, sz, sz);
+      }
+      rise('Jev calibration audit · 1,000 public examples', CX, Y(0.66) + 220 * U, 40, t, 2.2, { w: 600, c: MUTED });
+      rise('Method, data and code on GitHub', CX, Y(0.66) + 280 * U, 40, t, 2.35, { w: 600, c: MUTED });
+  }},
+];
+
+function draw(t) {
+  g.fillStyle = BG; g.fillRect(0, 0, W, H);
+  for (const s of SCENES) if (t >= s.from && t < s.to) s.draw(t - s.from);
+}
+window.DUR = DUR;
+window.READY = Promise.all([document.fonts.load('800 40px Inter'), document.fonts.load('700 40px "JetBrains Mono"'),
+  new Promise((r) => { const m = document.getElementById('mascot'); m.complete ? r() : m.onload = r; })]);
+window.seek = (t) => { draw(t); return true; };
+
+if (!navigator.webdriver) {
+  window.READY.then(() => {
+    const t0 = performance.now();
+    (function loop() { draw(((performance.now() - t0) / 1000) % DUR); requestAnimationFrame(loop); })();
+  });
+}
+</script>

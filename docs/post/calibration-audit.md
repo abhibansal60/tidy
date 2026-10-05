@@ -2,7 +2,7 @@
 
 For people who have never heard of Jev. Numbers come from `docs/research/jev-calibration-audit.md`. Speed and cost
 multipliers are against Claude Haiku 4.5 as run here (through the Claude Code CLI, thinking on). Do not post without
-the owner's explicit yes on the exact text.
+the owner's explicit yes on the exact text. Video: `docs/assets/calibration/jev-confidence-reel.mp4` (9:16, 35 s, built in `docs/post/calibration-reel/`).
 
 ## LinkedIn
 
@@ -16,7 +16,7 @@ Bank messages: Jev was right 80% of the time. So was Claude Haiku. Jev answered 
 
 GitHub issues: Jev said it was 99% sure on almost two thirds of them. It was right on 81% of those. Very sure did not mean right.
 
-The surprise: an old-school word-counting model, with no chat AI inside, did as well or better on both sets once it had seen public examples.
+The surprise: an old-school word-counting model, with no chat AI inside, beat Jev on the bank messages and tied it on the GitHub issues once it had seen public examples.
 
 What I take from it: Jev is fast, cheap and gives the same answer twice. Its confidence is a useful hint on some tasks and not on others. Before you let it act on its own, test it on a few hundred of your own examples.
 
@@ -32,8 +32,8 @@ I wrote the pass or fail rule before running anything. Method, numbers and chart
 
 4/ Test 2: 500 GitHub issues. Bug, feature request or question? Jev said "99% sure" on almost two thirds of them. It was right on 81% of those.
 
-5/ The surprise: an old-school word-counting model, no chat AI inside, trained on public examples, matched or beat Jev on both tests.
+5/ The surprise: an old-school word-counting model, no chat AI inside, trained on public examples, beat Jev on bank messages and tied it on GitHub issues.
 
-6/ My takeaway: Jev is fast, cheap and gives the same answer twice. Its confidence is a hint, not a promise. Test it on a few hundred of your own examples before you let it act alone.
+6/ My takeaway: Jev is fast, cheap and gives the same answer twice. Its confidence is a hint. Test it on a few hundred of your own examples before you let it act alone.
 
 7/ I wrote the pass or fail rule before running anything. Jev missed it on both tests, one by a hair. Method, numbers and charts in the repo. DM me for the link.
