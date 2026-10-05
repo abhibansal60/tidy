@@ -1,8 +1,9 @@
 import base64
+import time
 import unittest
 from unittest.mock import Mock
 
-from tidy.gmail import APIError, Gmail, READ_SCOPE, SCOPES, check_scopes, parse_list_unsubscribe, parse_message
+from tidy.gmail import APIError, Gmail, READ_SCOPE, SCOPES, check_scopes, parse_list_unsubscribe, parse_message, _html_to_text
 
 
 def response(payload, status=200):
@@ -95,6 +96,18 @@ class ParseMessageTests(unittest.TestCase):
 
     def test_one_click_defaults_false_without_the_header(self):
         self.assertFalse(parse_message(RAW_MESSAGE)["list_unsubscribe_one_click"])
+
+
+class HtmlToTextTests(unittest.TestCase):
+    def test_style_and_script_blocks_are_dropped(self):
+        self.assertEqual(_html_to_text("<p>hi</p><STYLE x>a{}</style>there<script>x</SCRIPT>!").split(), ["hi", "there", "!"])
+        self.assertEqual(_html_to_text("a<style>never closed").strip(), "a")
+
+    def test_unclosed_style_tags_cannot_stall_a_run(self):
+        # The old lazy regex took ~29s on 200 KB of these; any sender could send one.
+        started = time.perf_counter()
+        _html_to_text("<style>" * 100_000)
+        self.assertLess(time.perf_counter() - started, 1)
 
 
 class ParseListUnsubscribeTests(unittest.TestCase):

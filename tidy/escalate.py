@@ -29,11 +29,14 @@ def prompt_for(state):
 def ask(model, state, effort=None):
     """One channel through Claude Code headless (`claude -p`). Returns answers or a short safe error."""
     started = time.monotonic()
-    proc = subprocess.run(
-        ["claude", "-p", "--model", model, *(["--effort", effort] if effort else []), "--tools", "",
-         "--output-format", "json", "--no-session-persistence", "--disable-slash-commands",
-         "--setting-sources", "", "--json-schema", json.dumps(OUTPUT_SCHEMA)],
-        input=prompt_for(state), capture_output=True, text=True, timeout=180)
+    try:
+        proc = subprocess.run(
+            ["claude", "-p", "--model", model, *(["--effort", effort] if effort else []), "--tools", "",
+             "--output-format", "json", "--no-session-persistence", "--disable-slash-commands",
+             "--setting-sources", "", "--json-schema", json.dumps(OUTPUT_SCHEMA)],
+            input=prompt_for(state), capture_output=True, text=True, timeout=180)
+    except subprocess.TimeoutExpired:
+        return {"error": "timed out after 180s", "wall_ms": round((time.monotonic() - started) * 1000)}
     wall = round((time.monotonic() - started) * 1000)
     try:
         out = json.loads(proc.stdout)

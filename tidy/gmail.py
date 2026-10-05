@@ -56,7 +56,7 @@ def _retryable(response):
 def _retry_delay(response):
     delay = response.headers.get("Retry-After", "")
     if delay.isdigit():
-        return float(delay)
+        return min(float(delay), 120)  # a hostile or broken Retry-After must not park the run for hours
     return 65 if response.status_code == 403 else 2  # per-minute quota resets; short backoff won't help a 403
 
 
@@ -237,14 +237,30 @@ def _part_text(payload, mime_type):
     return None
 
 
-_STYLE_SCRIPT_RE = re.compile(r"<(style|script)\b[^>]*>.*?</\1>", re.IGNORECASE | re.DOTALL)
+_STYLE_SCRIPT_OPEN_RE = re.compile(r"<(style|script)\b", re.IGNORECASE)
 _TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _drop_style_script(html):
+    """Remove style/script blocks in one linear pass. A lazy `.*?</\\1>` regex is quadratic on unclosed
+    tags, so any sender could stall the run with one crafted email; an unclosed block drops the rest."""
+    lower, out, i = html.lower(), [], 0
+    while m := _STYLE_SCRIPT_OPEN_RE.search(html, i):
+        out.append(html[i:m.start()])
+        close = f"</{m.group(1).lower()}>"
+        end = lower.find(close, m.end())
+        if end == -1:
+            return " ".join(out)
+        out.append(" ")
+        i = end + len(close)
+    out.append(html[i:])
+    return "".join(out)
 
 
 def _html_to_text(html):
     """Strip style/script blocks (their content, not just the tags) before generic tag-stripping,
     so CSS/JS never crowds out the actual message ahead of the 1,000-char truncation."""
-    return unescape(_TAG_RE.sub(" ", _STYLE_SCRIPT_RE.sub(" ", html)))
+    return unescape(_TAG_RE.sub(" ", _drop_style_script(html)))
 
 
 def _body_text(payload, snippet):

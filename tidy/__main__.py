@@ -128,7 +128,7 @@ def main(argv=None):
     mail_triage = commands.add_parser("mail-triage", help="Jev classifies recent inbox mail; dry run by default. --apply archives/spams (label-only, never deletes).")
     mail_triage.add_argument("--query", default="in:inbox newer_than:7d")
     mail_triage.add_argument("--limit", type=int, default=20)
-    mail_triage.add_argument("--max-calls", type=int, default=200)
+    mail_triage.add_argument("--max-calls", type=int, default=1200)
     mail_triage.add_argument("--execute", action="store_true")
     mail_triage.add_argument("--apply", action="store_true", help="Actually archive/spam the proposed messages (requires --execute and a write token)")
     mail_triage.add_argument("--cap-archive", type=int, default=100, help="Per-run safety ceiling on auto-applied ARCHIVE actions (ADR 0005 caps pattern); excess proposals are held, not applied")

@@ -176,11 +176,12 @@ def propose(judgment, labels=()):
         # signal corroborating "this looks automated/bulk", same shape as policy.py's two-dimension rule.
         facts = judgment.facts or {}
         gmail_tab = sorted(BULK_LABELS & set(labels))
-        corroborated = facts.get("list_unsubscribe_header") or not facts.get("addressed_directly") or gmail_tab
+        # Not being the sole To recipient is no bulk signal: Cc, family threads and aliases are personal mail.
+        corroborated = facts.get("list_unsubscribe_header") or gmail_tab
         if not corroborated:
             return MailProposal(judgment.message_id, "REVIEW", judgment.category,
-                                signals + ["no independent corroborating signal (personally addressed, no unsubscribe header, Gmail Primary tab)"])
-        if gmail_tab and not facts.get("list_unsubscribe_header") and facts.get("addressed_directly"):
+                                signals + ["no independent corroborating signal (no unsubscribe header, Gmail Primary tab)"])
+        if gmail_tab and not facts.get("list_unsubscribe_header"):
             signals.append(f"corroborated by Gmail tab ({gmail_tab[0]})")
     return MailProposal(judgment.message_id, action, judgment.category, signals)
 
