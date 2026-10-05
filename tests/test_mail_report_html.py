@@ -52,7 +52,7 @@ class RenderTests(unittest.TestCase):
 
     def test_open_in_gmail_link_uses_thread_and_account(self):
         html = m.render([row(action="KEEP", thread_id="abc123")], account="me@gmail.com")
-        self.assertIn("https://mail.google.com/mail/?authuser=me@gmail.com#all/abc123", html)
+        self.assertIn("https://mail.google.com/mail/?authuser=me%40gmail.com#all/abc123", html)
 
     def test_unsubscribe_is_honest_and_only_on_noise(self):
         unsub = {"http": "https://x.com/u?id=1", "mailto": "mailto:u@x.com"}

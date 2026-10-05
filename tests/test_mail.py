@@ -149,6 +149,12 @@ class ProposeTests(unittest.TestCase):
         self.assertEqual(proposal.action, "REVIEW")
         self.assertIn("no independent corroborating signal", proposal.signals[-1])
 
+    def test_personal_mail_with_several_recipients_is_not_auto_archived(self):
+        # Cc'd, or one of two recipients, in Primary, no unsubscribe header: a family thread, not bulk mail.
+        for to in (f"{OWNER}, sibling@example.com", "sibling@example.com"):
+            judgment = classify(FakeClient(answer(choice="Updates", confidence=0.95)), message(to=to), OWNER)
+            self.assertEqual(propose(judgment, ["INBOX"]).action, "REVIEW", to)
+
     def test_gmail_bulk_tab_counts_as_a_corroborating_signal(self):
         judgment = classify(FakeClient(answer(choice="Updates", confidence=0.95)), message(to=OWNER), OWNER)
 

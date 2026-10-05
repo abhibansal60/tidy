@@ -9,6 +9,7 @@ buttons call /api/mail/act on the same origin (the tidy-mail app), which is the 
 from email.utils import parseaddr
 from html import escape
 import re
+from urllib.parse import quote
 
 from .report_html import csp_hash
 
@@ -158,7 +159,7 @@ def bucket(r):
 
 def _gmail_url(r, account):
     thread = r.get("thread_id") or r["id"]
-    who = f"?authuser={escape(account, quote=True)}" if account else ""
+    who = f"?authuser={escape(quote(account), quote=True)}" if account else ""
     return f"https://mail.google.com/mail/{who}#all/{escape(thread, quote=True)}"
 
 

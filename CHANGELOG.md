@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Security:** HTML mail bodies are stripped of style/script blocks in one linear pass. The old regex was
+  quadratic on unclosed tags, so one crafted email (200 KB) could stall a run for about 30 seconds per copy.
+- **Mail:** auto-archive no longer treats "you aren't the only To recipient" as a bulk signal. Cc'd mail, family
+  threads and alias deliveries need an unsubscribe header or a Gmail bulk tab before Jev's category can archive them.
+- **Mail:** `mail-triage --max-calls` defaults to 1200, so the documented `--limit 200` run no longer hits the budget.
+  Gmail `Retry-After` waits are capped at 120 s; a timed-out second opinion is recorded as an error instead of
+  stopping the run; "Open in Gmail" URL-encodes the account.
+
 ## 0.2.3 (2026-10-02)
 
 - **Mail dashboard:** grouped by what needs you (Needs you, FYI, Noise, Handled) as tabs and a card grid, with
