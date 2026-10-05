@@ -6,7 +6,7 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 .venv/bin/python -m unittest discover -s tests
 ```
 
-- Read [AGENTS.md](AGENTS.md) (project rules), [CONTEXT.md](CONTEXT.md) (vocabulary) and [docs/adr](docs/adr) first.
+- Read [AGENTS.md](AGENTS.md) (project rules), [GLOSSARY.md](GLOSSARY.md) (vocabulary) and [docs/adr](docs/adr) first.
 - Jev makes judgments; code owns arithmetic, policy, persistence and every side effect. New account changes need a dry
   run, a separate write token, a live recheck and a test.
 - Tests use synthetic data only. Never commit anything from `.tidy/`, `data/`, `secrets/` or `.env`.
