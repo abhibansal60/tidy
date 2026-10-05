@@ -3,7 +3,7 @@
 import random
 import statistics
 
-from evals.labeled_accuracy import auc
+from evals.labeled_accuracy import auc, bootstrap_ci
 
 
 def accuracy(correct):
@@ -35,8 +35,19 @@ def brier(p, truth):
 
 
 def auroc(scores, truth):
-    """P(a random true item scores above a random false one); ties count half."""
-    return auc([s for s, t in zip(scores, truth) if t], [s for s, t in zip(scores, truth) if not t])
+    """P(a random true item scores above a random false one); ties count half. None if a class is empty."""
+    pos, neg = _split(scores, truth)
+    return auc(pos, neg) if pos and neg else None
+
+
+def auroc_ci(scores, truth):
+    """95% interval, resampling true and false items separately so every resample has both."""
+    pos, neg = _split(scores, truth)
+    return bootstrap_ci(pos, neg) if pos and neg else (None, None)
+
+
+def _split(scores, truth):
+    return [s for s, t in zip(scores, truth) if t], [s for s, t in zip(scores, truth) if not t]
 
 
 def _answered(conf, correct, threshold):
@@ -53,9 +64,9 @@ def heldout_gate(conf, correct, half_a, max_error=0.05):
     """Lowest threshold with error <= max_error on half A, then coverage and error on half B."""
     a = [(c, ok) for c, ok, h in zip(conf, correct, half_a) if h]
     b = [(c, ok) for c, ok, h in zip(conf, correct, half_a) if not h]
-    ca, oa = zip(*a)
+    ca, oa = zip(*a) if a else ((), ())
     threshold = next((t for t in sorted(set(ca)) if (_answered(ca, oa, t)[1] or 0) <= max_error), None)
-    if threshold is None:
+    if threshold is None or not b:
         return {"threshold": None, "a_coverage": 0.0, "b_coverage": 0.0, "b_error": None}
     a_cov, _ = _answered(ca, oa, threshold)
     b_cov, b_err = _answered(*zip(*b), threshold)

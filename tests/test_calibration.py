@@ -20,6 +20,8 @@ class CalibrationMetricTests(unittest.TestCase):
         self.assertAlmostEqual(cal.brier([1.0, 0.0, 0.5], [True, False, True]), 0.25 / 3)
         self.assertEqual(cal.auroc([0.9, 0.8, 0.1], [True, True, False]), 1.0)
         self.assertEqual(cal.auroc([0.5, 0.5], [True, False]), 0.5)
+        self.assertIsNone(cal.auroc([0.9], [True]))  # undefined without a false item
+        self.assertEqual(cal.auroc_ci([0.9], [True]), (None, None))
 
     def test_abstain_table_reports_coverage_and_error_among_answered(self):
         conf = [0.9, 0.8, 0.7, 0.4]
