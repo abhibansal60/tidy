@@ -107,6 +107,38 @@ class ReportTests(unittest.TestCase):
         self.assertNotIn("correct", summary["jev"])
 
 
+class RetryTests(unittest.TestCase):
+    def test_retry_reruns_only_failed_items_and_keeps_the_failed_cost(self):
+        items = [{"id": str(k), "label": "a", "candidate": "a", "candidate_is_true": True, "half_a": True,
+                  "state": {"customer_message": "m"}} for k in range(3)]
+        answer = {"label": "a", "top_prob": 0.9, "confidence": 0.9, "p_candidate": 0.9, "prompt_chars": 35,
+                  "output_tokens": 10, "cli_cost_usd": 0.01, "api_ms": 5}
+        asked = []
+
+        def fake_haiku_ask(dataset, labels):
+            def ask(item):
+                asked.append(item["id"])
+                return {**answer, "error": "no structured_output"} if item["id"] == "1" and len(asked) <= 3 else answer
+            return ask
+
+        real = audit.haiku_ask
+        audit.haiku_ask = fake_haiku_ask
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                out = Path(d)
+                (out / "manifest_banking77.json").write_text(json.dumps({"items": items, "labels": ["a"], "train": []}))
+                audit.run_system(out, "haiku", "banking77", 3, False, 1)
+                audit.run_system(out, "haiku", "banking77", 3, False, 1, retry_errors=True)
+                record = json.loads((out / "banking77_haiku.json").read_text())
+        finally:
+            audit.haiku_ask = real
+
+        self.assertEqual(asked, ["0", "1", "2", "1"])
+        self.assertEqual(record["calls"], 4)
+        self.assertNotIn("error", record["results"]["1"])
+        self.assertEqual(record["cost"]["cli_reported_usd_all_calls"], 0.04)
+
+
 @unittest.skipUnless(find_spec("sklearn"), "TF-IDF baseline needs scikit-learn: pip install scikit-learn")
 class TfidfTests(unittest.TestCase):
     def test_tfidf_learns_separable_labels_and_scores_the_candidate(self):

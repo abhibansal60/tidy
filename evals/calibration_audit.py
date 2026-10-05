@@ -145,9 +145,12 @@ def haiku_ask(dataset, labels):
             input=prompt, capture_output=True, text=True, timeout=180)
         out = json.loads(proc.stdout)
         usage = out.get("usage", {})
-        return {**from_haiku(out["structured_output"]), "raw": out["structured_output"], "model": HAIKU,
-                "api_ms": out.get("duration_api_ms"), "cli_cost_usd": out.get("total_cost_usd"),
-                "prompt_chars": len(prompt), "output_tokens": usage.get("output_tokens")}
+        spent = {"model": HAIKU, "api_ms": out.get("duration_api_ms"), "cli_cost_usd": out.get("total_cost_usd"),
+                 "prompt_chars": len(prompt), "output_tokens": usage.get("output_tokens")}
+        if "structured_output" not in out:  # the CLI ended without filling the schema; keep why and what it cost
+            return {**spent, "error": f"no structured_output: {out.get('subtype')}, stop={out.get('stop_reason')}, "
+                                      f"result={str(out.get('result'))[:100]!r}"}
+        return {**from_haiku(out["structured_output"]), "raw": out["structured_output"], **spent}
     return ask
 
 
@@ -217,17 +220,19 @@ def paired_difference(a, b):
 
 def _cost(run_file):
     res = [x for x in run_file["results"].values() if "error" not in x]
+    calls = [*run_file["results"].values(), *run_file.get("failed_attempts", [])]  # failed CLI calls still cost
     if run_file["system"] == "jev":
         tokens = sum(x["input_tokens"] for x in res)
         return {"input_tokens": tokens, "usd": round(tokens * JEV_USD_PER_MTOK_INPUT / 1e6, 5)}
     if run_file["system"] == "haiku":
         price_in, price_out = PRICES[HAIKU]
-        est_in = sum(x["prompt_chars"] for x in res) / CHARS_PER_TOKEN
+        est_in = sum(x.get("prompt_chars", 0) for x in res) / CHARS_PER_TOKEN
         out = sum(x["output_tokens"] or 0 for x in res)
-        return {"cli_reported_usd": round(sum(x["cli_cost_usd"] or 0 for x in res), 4),
+        api_ms = [x["api_ms"] for x in res if x.get("api_ms")]
+        return {"cli_reported_usd_all_calls": round(sum(x.get("cli_cost_usd") or 0 for x in calls), 4),
                 "direct_api_estimate_usd": round((est_in * price_in + out * price_out) / 1e6, 4),
                 "estimated_input_tokens": round(est_in), "output_tokens": out,
-                "api_ms_p50": pct([x["api_ms"] for x in res if x.get("api_ms")], .5)}
+                "api_ms_p50": pct(api_ms, .5) if api_ms else None}
     return {"usd": 0}
 
 
@@ -248,10 +253,14 @@ def fetch(out, n):
                           "labels": len(labels), "frozen_items": len(items)}))
 
 
-def run_system(out, system, dataset, limit, repeat, workers):
+def run_system(out, system, dataset, limit, repeat, workers, retry_errors=False):
     items, labels, train = _load(out, dataset)
     items = items[:limit]
-    if len(items) > MAX_CALLS:
+    path = out / f"{dataset}_{system}{'_repeat' if repeat else ''}.json"
+    previous = json.loads(path.read_text()) if retry_errors else None
+    if previous:  # rerun only the calls that returned no answer; answered items are never re-asked
+        items = [i for i in items if "error" in previous["results"].get(i["id"], {"error": "missing"})]
+    if len(items) + (previous or {}).get("calls", 0) > MAX_CALLS:
         raise SystemExit(f"{len(items)} items exceeds the hard cap of {MAX_CALLS} calls per run")
     started = time.monotonic()
     if system == "tfidf":
@@ -261,11 +270,18 @@ def run_system(out, system, dataset, limit, repeat, workers):
             results = run(items, jev_ask(client, dataset, labels), workers)
     else:
         results = run(items, haiku_ask(dataset, labels), workers)
-    record = {"system": system, "dataset": dataset, "items": len(items), "workers": workers, "repeat": repeat,
-              "wall_ms": round((time.monotonic() - started) * 1000),
-              "started_at": datetime.now(timezone.utc).isoformat(), "results": results}
+    wall = round((time.monotonic() - started) * 1000)
+    if previous:
+        record = {**previous, "results": {**previous["results"], **results},
+                  "calls": previous.get("calls", previous["items"]) + len(items),
+                  "failed_attempts": previous.get("failed_attempts", []) + [previous["results"][i["id"]] for i in items],
+                  "retries": previous.get("retries", []) + [{"items": len(items), "wall_ms": wall}]}
+    else:
+        record = {"system": system, "dataset": dataset, "items": len(items), "calls": len(items), "workers": workers,
+                  "repeat": repeat, "wall_ms": wall, "started_at": datetime.now(timezone.utc).isoformat(),
+                  "results": results}
     record["cost"] = _cost(record)
-    private_json(out / f"{dataset}_{system}{'_repeat' if repeat else ''}.json", record)
+    private_json(path, record)
     errors = sum("error" in x for x in results.values())
     print(json.dumps({"system": system, "dataset": dataset, "items": len(items), "errors": errors,
                       "wall_ms": record["wall_ms"], "cost": record["cost"]}))
@@ -311,12 +327,13 @@ def main():
     ap.add_argument("--limit", type=int, default=500)
     ap.add_argument("--repeat", action="store_true", help="second, uncached run for repeatability")
     ap.add_argument("--workers", type=int, default=6)
+    ap.add_argument("--retry-errors", action="store_true", help="rerun only items whose call returned no answer")
     ap.add_argument("--out", type=Path, default=OUT)
     args = ap.parse_args()
     if args.command == "fetch":
         fetch(args.out, args.n)
     elif args.command == "run":
-        run_system(args.out, args.system, args.dataset, args.limit, args.repeat, args.workers)
+        run_system(args.out, args.system, args.dataset, args.limit, args.repeat, args.workers, args.retry_errors)
     else:
         report(args.out)
 
