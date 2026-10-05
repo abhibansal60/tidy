@@ -271,6 +271,10 @@ def run_system(out, system, dataset, limit, repeat, workers):
                       "wall_ms": record["wall_ms"], "cost": record["cost"]}))
 
 
+def _pick(results, signal):
+    return {k: (v["label"], v[signal]) for k, v in results.items() if "error" not in v}
+
+
 def report(out):
     summary = {}
     for dataset in DATASETS:
@@ -284,8 +288,7 @@ def report(out):
             s.update({"items_run": r["items"], "workers": r["workers"], "wall_ms": r["wall_ms"], "cost": r["cost"]})
             again = runs.get(f"{name}_repeat")
             if again:
-                pick = lambda res: {k: (v["label"], v[sig]) for k, v in res.items() if "error" not in v}  # noqa: E731
-                s["repeatability"] = {sig: cal.repeatability(pick(r["results"]), pick(again["results"]))
+                s["repeatability"] = {sig: cal.repeatability(_pick(r["results"], sig), _pick(again["results"], sig))
                                       for sig in ("top_prob", "confidence", "p_candidate")}
             ds[name] = s
         if "jev" in ds:

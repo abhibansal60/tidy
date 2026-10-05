@@ -1,4 +1,7 @@
 from importlib.util import find_spec
+import json
+from pathlib import Path
+import tempfile
 import unittest
 
 from evals import calibration_audit as audit
@@ -75,6 +78,33 @@ class SummaryTests(unittest.TestCase):
                    "2": {"error": "timeout", "wall_ms": 9}}
         out = audit.summarize(items, results)
         self.assertEqual((out["n"], out["errors"]), (1, 1))
+
+
+class ReportTests(unittest.TestCase):
+    def test_report_adds_repeatability_and_paired_differences(self):
+        items = [{"id": str(k), "label": "a", "candidate": "a", "candidate_is_true": True, "half_a": k % 2 == 0}
+                 for k in range(4)] + [{"id": "4", "label": "b", "candidate": "a", "candidate_is_true": False,
+                                        "half_a": True}]
+
+        def results(labels, conf):
+            return {str(k): {"label": x, "top_prob": conf, "confidence": conf, "p_candidate": 0.5, "wall_ms": 1,
+                             "input_tokens": 10} for k, x in enumerate(labels)}
+
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d)
+            for ds in audit.DATASETS:
+                (out / f"manifest_{ds}.json").write_text(json.dumps({"items": items, "labels": ["a", "b"], "train": []}))
+            for name, labels, conf in [("jev", "aaaab", 0.9), ("jev_repeat", "aaaaa", 0.8), ("tfidf", "aaaaa", 0.7)]:
+                system = name.split("_")[0]
+                (out / f"banking77_{name}.json").write_text(json.dumps(
+                    {"system": system, "items": 5, "workers": 1, "wall_ms": 5, "cost": {}, "results": results(labels, conf)}))
+            audit.report(out)
+            summary = json.loads((out / "summary.json").read_text())["banking77"]
+
+        self.assertEqual(summary["jev"]["repeatability"]["top_prob"],
+                         {"items": 5, "label_agreement": 0.8, "mean_abs_change": 0.1})
+        self.assertEqual(summary["jev"]["vs_tfidf"]["difference"], 0.2)
+        self.assertNotIn("correct", summary["jev"])
 
 
 @unittest.skipUnless(find_spec("sklearn"), "TF-IDF baseline needs scikit-learn: pip install scikit-learn")
