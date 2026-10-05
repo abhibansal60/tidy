@@ -282,7 +282,7 @@ Repeat with `--dataset nlbse`. Tests: `python -m unittest discover -s tests`.
 - [x] Haiku run, both datasets, plus re-run slice (with retries, section 7)
 - [x] Report numbers, charts, go/no-go verdicts
 - [x] Draft post summary (unposted, below)
-- [ ] PR opened and linked
+- [x] PR opened and linked (#12)
 
 ## Draft post (not posted; for the owner to edit)
 
