@@ -11,6 +11,12 @@ def row(id="m1", subject="Invoice ready", sender="Billing <b@x.com>", category="
             "unsubscribe": unsubscribe}
 
 
+class SectionTabsTests(unittest.TestCase):
+    def test_mail_page_has_mail_and_jobs_tabs_with_mail_current(self):
+        html = m.render([row()])
+        self.assertIn('<a href="/" aria-current="page">Mail</a><a href="/jobs">Jobs</a>', html)
+
+
 class BucketTests(unittest.TestCase):
     def test_keep_needs_you(self):
         self.assertEqual(m.bucket(row(action="KEEP", category="Needs Reply")), "needs_you")

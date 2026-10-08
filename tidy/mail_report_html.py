@@ -29,10 +29,12 @@ CSS = """
 *{box-sizing:border-box}
 body{margin:0;background:var(--ground);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 main{max-width:1180px;margin:0 auto;padding:20px 14px 88px}
-h1{display:inline-block;margin:0 14px 4px 0;font-size:22px;font-weight:650;letter-spacing:-.01em}
 h2{margin:28px 0 8px;font-size:13px;font-weight:650;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 h2 b{color:var(--ink);font-size:15px;letter-spacing:0;margin-left:6px}
-.nav{display:inline-block}.nav a{color:var(--accent);font-size:14px;margin-right:12px}.nav button{font:inherit;font-size:14px;color:var(--accent);background:none;border:0;padding:0;cursor:pointer}
+.tabs{position:sticky;top:0;z-index:5;display:flex;align-items:stretch;gap:4px;margin:-20px -14px 0;padding:0 14px;background:var(--ground);border-bottom:1px solid var(--line)}
+.tabs a{padding:14px 16px 12px;border-bottom:3px solid transparent;color:var(--muted);font-size:16px;font-weight:600;text-decoration:none}
+.tabs a[aria-current=page]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button{margin-left:auto;font:inherit;font-size:14px;color:var(--accent);background:none;border:0;padding:0 4px;cursor:pointer}
 .health{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;padding:10px 12px;margin:10px 0 0;border:1px solid var(--line);background:var(--paper);border-radius:10px;font-size:14px;color:var(--muted)}
 .health.stale,.health.dry{background:var(--warnbg);border-color:var(--warn);color:var(--warn)}
 .health.stale{background:var(--badbg);border-color:var(--bad);color:var(--bad)}
@@ -300,7 +302,7 @@ def render(rows, applied=False, run_at=None, account=None):
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Mail">
 <meta name="theme-color" content="#1F5FD0">
 <title>Mail</title><style>{CSS}</style></head><body><main>
-<h1>Mail</h1><nav class="nav"><a href="/jobs">Jobs</a><button type="button" id="refresh" aria-label="Refresh">Refresh</button></nav>
+<nav class="tabs" aria-label="Sections"><a href="/" aria-current="page">Mail</a><a href="/jobs">Jobs</a><button type="button" id="refresh" aria-label="Refresh">Refresh</button></nav>
 <div id="health" class="{health_cls}" data-run-at="{escape(run_at or '', quote=True)}"><span>Ran <strong data-when>{escape(run_at or 'unknown time')}</strong></span><span data-state>{escape(state)}</span><span>{len(rows)} messages judged by Jev</span></div>
 <div class="chips">{chips}</div>
 <input id="q" type="search" placeholder="Search subject or sender" aria-label="Search subject or sender">
