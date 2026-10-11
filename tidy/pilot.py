@@ -35,6 +35,6 @@ def plan(db, channel_ids, labels_path, window, all_active=False):
 def run(db, api, channel_ids, window, now=None):
     result = collector.collect(api, channel_ids, window, now)
     store.save_samples(db, result, api.units, now)
-    return {"collected": len(result.samples), "errors": result.errors, "request_units": api.units,
+    return {"collected": len(result.samples), "errors": result.errors, "gone": result.gone, "request_units": api.units,
             "coverage": {s.channel_id: s.coverage for s in result.samples},
             "expires_at": min((s.expires_at for s in result.samples), default=None)}

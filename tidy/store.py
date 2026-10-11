@@ -268,7 +268,7 @@ def save_inventory(db, identity, rows, run_id, request_units):
 
 
 def save_samples(db, result, request_units, now=None):
-    """Record one collection run; a channel that failed keeps its previous sample."""
+    """Record one collection run; a channel that failed keeps its previous sample, a gone one loses all derived data."""
     from dataclasses import asdict
     stamp = (now or datetime.now(timezone.utc)).isoformat()
     with db:
@@ -279,6 +279,9 @@ def save_samples(db, result, request_units, now=None):
                        (s.channel_id, run, s.fetched_at, s.expires_at, s.evidence_hash, json.dumps(asdict(s))))
         for channel_id, message in result.errors.items():
             db.execute("INSERT INTO collection_errors VALUES (?, ?, ?)", (run, channel_id, message))
+        for channel_id in result.gone:  # deleted or private on YouTube: drop what the API told us about it
+            for table in ("evidence_samples", "judgments", "second_opinions"):
+                db.execute(f"DELETE FROM {table} WHERE channel_id=?", (channel_id,))
     return run
 
 
