@@ -133,12 +133,19 @@ def render_report(proposals, judgments, samples, labels):
                   f"- Signals: {'; '.join(p.signals) or 'none'}", "- Dimensions:"]
         for name, a in j.answers.items():
             value = a["score"] if "score" in a else a["noul"]
-            conf = f" (confidence {a['confidence']:.2f})" if "confidence" in a else ""
-            lines.append(f"  - {name}: {_fmt(name, value)}{conf}")
+            notes = ([f"confidence {a['confidence']:.2f}"] if "confidence" in a else []) + \
+                    ([distribution(a)] if a.get("probabilities") else [])
+            lines.append(f"  - {name}: {_fmt(name, value)}" + (f" ({'; '.join(notes)})" if notes else ""))
         lines += ["- Videos:"] + [f"  - [{v['title']}]({v['url']})" for v in s.videos]
         lines += [f"- Owner label: {labels.get(p.channel_id, 'none')}",
                   "- Owner override (keep / drop / unsure): ", "- Note: ", ""]
     return "\n".join(lines)
+
+
+def distribution(answer):
+    """Jev's probability per score level, e.g. 'distribution 0: 5%, 1: 10%'. Stored keys are strings."""
+    levels = sorted(answer["probabilities"].items(), key=lambda kv: int(kv[0]))
+    return "distribution " + ", ".join(f"{k}: {p:.0%}" for k, p in levels)
 
 
 def _fmt(name, value):

@@ -116,6 +116,15 @@ class ReportTests(unittest.TestCase):
                          "newest upload 19 days old", "Owner label: keep", "Owner override (keep / drop / unsure): "):
             self.assertIn(expected, text)
 
+    def test_report_shows_jev_distribution_for_score_dimensions(self):
+        j = replace(judgment(rel=2.5, rel_conf=0.8), channel_id="chanA")
+        # Stored judgments are JSON, so probability keys come back as strings.
+        j.answers["relevance"]["probabilities"] = {"3": 0.6, "0": 0.05, "2": 0.25, "1": 0.1}
+
+        text = review.render_report([prop("chanA", "KEEP")], [j], [sample("chanA", "Alpha")], {})
+
+        self.assertIn("relevance: 2.5 (confidence 0.80; distribution 0: 5%, 1: 10%, 2: 25%, 3: 60%)", text)
+
 
 class CliTests(unittest.TestCase):
     def setUp(self):
@@ -152,6 +161,17 @@ class CliTests(unittest.TestCase):
         code, out = self.run_cli("gate")
         stats = json.loads(out)
         self.assertEqual((stats["n"], stats["agreements"], stats["gate"]["open"]), (1, 1, False))
+
+    def test_to_label_offers_unlabeled_channels_with_their_proposal_then_skips_labeled(self):
+        code, out = self.run_cli("to-label", "--count", "5")
+
+        self.assertEqual(code, 0)
+        [row] = json.loads(out)["channels"]
+        self.assertEqual((row["channel_id"], row["title"], row["proposal"]), ("chanA", "Alpha Labs", "UNSUBSCRIBE"))
+        self.assertTrue(row["signals"])
+
+        self.run_cli("label", "chanA", "keep")
+        self.assertEqual(json.loads(self.run_cli("to-label")[1])["channels"], [])
 
     def test_propose_marks_trial_channels_using_the_trials_table(self):
         db = store.connect(self.dir / "inventory.sqlite3")
