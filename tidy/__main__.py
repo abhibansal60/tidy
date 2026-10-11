@@ -97,6 +97,8 @@ def main(argv=None):
     proposals.add_argument("--html", type=Path, help="Write a self-contained HTML review page to this path instead of Markdown")
     proposals.add_argument("--json", type=Path, help="Write the proposals as a JSON list that `tidy act --proposals` reads")
     commands.add_parser("gate", help="Offline: agreement with owner labels and calibration gate status")
+    queue = commands.add_parser("to-label", help="Offline: unlabeled channels to label next, spread across Jev value tiers and confidence")
+    queue.add_argument("--count", type=int, default=10)
     mark = commands.add_parser("label", help="Record an owner label")
     mark.add_argument("channel_id")
     mark.add_argument("verdict", choices=review.VERDICTS)
@@ -189,6 +191,12 @@ def main(argv=None):
             config = profile.load(args.data_dir / "profile.json")
             stats = review.agreement(db, review.derive(db, config)[0])
             output = {**stats, "gate": review.gate_status(stats, config)}
+        elif args.command == "to-label":
+            proposals, judgments, samples = review.derive(db, profile.load(args.data_dir / "profile.json"))
+            by_p, by_s = {p.channel_id: p for p in proposals}, {s.channel_id: s for s in samples}
+            output = {"channels": [{"channel_id": c, "title": by_s[c].title, "proposal": by_p[c].action,
+                                    "signals": by_p[c].signals}
+                                   for c in review.sample_for_labeling(db, judgments, args.count)]}
         elif args.command == "label":
             review.label(db, args.channel_id, args.verdict, args.note)
             output = {"labeled": args.channel_id, "verdict": args.verdict}

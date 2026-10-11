@@ -12,6 +12,8 @@ from html import escape
 import re
 import shlex
 
+from .review import distribution
+
 ORDER = ("UNSUBSCRIBE", "REVIEW", "WATCH", "KEEP", "SUBSCRIBE")
 LABEL = {"UNSUBSCRIBE": "Unsubscribe", "REVIEW": "Review", "WATCH": "Watch", "KEEP": "Keep", "SUBSCRIBE": "Subscribe"}
 SCALE = {"relevance": 3, "apparent_value": 3, "watch_likelihood": 3, "packaging_risk": 1, "evidence_sufficiency": 1}
@@ -205,4 +207,6 @@ def _dim(name, answer):
         conf = "higher is riskier"
     elif name == "evidence_sufficiency":
         conf = "higher is stronger evidence"
+    if answer.get("probabilities"):
+        conf = "; ".join(x for x in (conf, distribution(answer)) if x)
     return f"<tr><th>{NAMES[name]}</th><td>{shown}</td><td>{conf}</td></tr>"

@@ -100,6 +100,16 @@ class ReportHtmlTests(unittest.TestCase):
         self.assertIn("apparent value", html)
         self.assertNotIn("scores content quality", html)
 
+    def test_score_rows_show_jev_distribution(self):
+        j = judgment(val=0.4)
+        j.answers["apparent_value"]["probabilities"] = {"0": 0.7, "1": 0.3}
+        s = sample(channel="chanA")
+
+        html = report_html.render([Proposal("chanA", "REVIEW", [], "policy-1", "h1")], [j], [s], {},
+                                  {"open": False, "reasons": []}, ".tidy")
+
+        self.assertIn("distribution 0: 70%, 1: 30%", html)
+
     def test_gate_wording_never_promises_automatic_action(self):
         opened = build(gate={"open": True, "reasons": []})
 
