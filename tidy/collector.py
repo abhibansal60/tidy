@@ -1,11 +1,11 @@
 """Read-only evidence collection: dated, bounded samples of channel uploads for Jev."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
 
-from .youtube import APIError
+from .youtube import APIError, NotFound, QuotaExhausted
 
 RETENTION = timedelta(days=30)  # YouTube API data refresh/delete window (docs/research/youtube-api-policy.md)
 
@@ -27,30 +27,50 @@ class EvidenceSample:
 class CollectResult:
     samples: list
     errors: dict  # channel_id -> safe message; a failed channel never yields a partial sample
+    gone: list = field(default_factory=list)  # deleted, private or unknown channels: their stored data must go
+
+
+class ChannelGone(Exception):
+    pass
 
 
 def collect(api, channel_ids, window=12, now=None):
     now = now or datetime.now(timezone.utc)
     result = CollectResult([], {})
-    for cid in channel_ids:
+    for i, cid in enumerate(channel_ids):
         try:
             result.samples.append(_sample(api, cid, window, now))
+        except ChannelGone:
+            result.gone.append(cid)
+        except QuotaExhausted as error:
+            # Every later call would be refused too: stop instead of burning requests on certain failures.
+            result.errors[cid] = str(error)
+            result.errors.update({rest: "Not attempted: " + str(error) for rest in channel_ids[i + 1:]})
+            break
         except APIError as error:
             result.errors[cid] = str(error)
         except (KeyError, IndexError, TypeError):
-            result.errors[cid] = "Channel missing or response malformed."
+            result.errors[cid] = "Channel response malformed."
     return result
 
 
 def _sample(api, channel_id, window, now):
-    channel = api.get("channels", part="snippet,contentDetails", id=channel_id)["items"][0]
+    items = api.get("channels", part="snippet,contentDetails", id=channel_id).get("items")
+    if not items:  # channels.list answers an unknown, deleted or private ID with no items, not an error
+        raise ChannelGone
+    channel = items[0]
     uploads = channel["contentDetails"]["relatedPlaylists"]["uploads"]
     ids, token = [], None
     while len(ids) < window:
         params = {"part": "contentDetails", "playlistId": uploads, "maxResults": min(window - len(ids), 50)}
         if token:
             params["pageToken"] = token
-        page = api.get("playlistItems", **params)
+        try:
+            page = api.get("playlistItems", **params)
+        except NotFound:
+            if ids or token:
+                raise
+            break  # a channel with no public uploads has no uploads playlist
         ids += [e["contentDetails"]["videoId"] for e in page["items"]]
         token = page.get("nextPageToken")
         if not token:

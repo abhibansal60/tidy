@@ -58,6 +58,20 @@ class EvidenceStoreTests(unittest.TestCase):
         self.assertEqual(store.last_run(self.db), {"at": later.isoformat(), "request_units": 7, "collected": 1,
                                                    "failed": 1, "errors": {"chanA": "Local quota budget reached."}})
 
+    def test_gone_channel_loses_its_sample_judgments_and_second_opinions(self):
+        from tidy.judge import Judgment
+        store.save_samples(self.db, CollectResult([sample("chanA"), sample("chanB", evidence_hash="h2")], {}), 3, now=NOW)
+        expires = (NOW + timedelta(days=30)).isoformat()
+        store.put_judgment(self.db, Judgment("chanA", "h1", "titles-v1", "m", {}, {}, 1, NOW.isoformat()), "k", expires)
+        store.put_second_opinion(self.db, "chanA", "h1", "opus-x", {"apparent_value": 0.2}, expires)
+        later = NOW + timedelta(days=1)
+
+        store.save_samples(self.db, CollectResult([], {}, gone=["chanA"]), 1, now=later)
+
+        self.assertEqual([s.channel_id for s in store.latest_samples(self.db, now=later)], ["chanB"])
+        self.assertIsNone(store.get_judgment(self.db, "h1", "titles-v1", "k", now=later))
+        self.assertIsNone(store.get_second_opinion(self.db, "chanA", "h1", at=later))
+
     def test_expired_samples_are_never_returned(self):
         store.save_samples(self.db, CollectResult([sample()], {}), 3, now=NOW)
 

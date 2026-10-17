@@ -186,6 +186,10 @@ records its subscription ID, channel and title so `resubscribe` can restore it.
 Collects the latest 12 uploads per channel with the read-only token (about 3 quota
 units per channel), adds the channels named in `data/owner_labels.json` by title,
 and stores dated evidence samples that expire after 30 days. Nothing is sent to Jev yet.
+A channel that fails keeps its previous sample. A channel that YouTube no longer returns
+(deleted, private or unknown ID) is listed under `gone`, and its stored sample, judgments
+and second opinions are deleted. When the local budget or Google's daily quota runs out,
+the run stops and lists the remaining channels as not attempted.
 
 ## Schema experiment
 

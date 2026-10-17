@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Evidence:** `collect` stops at the first exhausted quota (local budget or Google's `quotaExceeded`) and lists
+  the rest as not attempted, instead of spending one refused request per channel. A channel with no public uploads
+  (uploads playlist 404) gives an empty sample, not an error. Deleted or private channels are reported as `gone`
+  and their stored evidence, judgments and second opinions are deleted.
 - **Security:** HTML mail bodies are stripped of style/script blocks in one linear pass. The old regex was
   quadratic on unclosed tags, so one crafted email (200 KB) could stall a run for about 30 seconds per copy.
 - **Mail:** auto-archive no longer treats "you aren't the only To recipient" as a bulk signal. Cc'd mail, family

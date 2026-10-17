@@ -48,7 +48,8 @@ class PilotTests(unittest.TestCase):
         report = pilot.run(self.db, api, ["chanA", "chanB", "ghost"], window=12, now=NOW)
 
         self.assertEqual(report["collected"], 2)
-        self.assertEqual(sorted(report["errors"]), ["ghost"])
+        self.assertEqual(report["errors"], {})
+        self.assertEqual(report["gone"], ["ghost"])
         self.assertEqual(report["request_units"], api.units)
         self.assertEqual(report["coverage"]["chanA"], {"requested": 12, "collected": 2, "unavailable": 0})
         self.assertEqual(report["expires_at"], "2026-10-20T00:00:00+00:00")

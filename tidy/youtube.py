@@ -28,6 +28,21 @@ class UnknownOutcome(APIError):
     """A mutation may or may not have happened; reconcile before retrying."""
 
 
+class QuotaExhausted(APIError):
+    """The local budget or Google's daily quota is spent; every further call will fail too."""
+
+
+class NotFound(APIError):
+    """HTTP 404: the requested resource does not exist or is not public."""
+
+
+def _error_reasons(response):
+    try:
+        return {e.get("reason") for e in response.json()["error"]["errors"]}
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return set()
+
+
 _oauth = GoogleOAuth(READ_SCOPE, WRITE_SCOPE, "read-only YouTube", "YouTube write", APIError)
 check_scopes, authorize = _oauth.check_scopes, _oauth.authorize
 load_credentials, save_credentials = _oauth.load_credentials, _oauth.save_credentials
@@ -48,7 +63,7 @@ class YouTube:
         for attempt in range(3):
             if is_youtube:
                 if self.units >= self.max_units:
-                    raise APIError("Local quota budget reached.")
+                    raise QuotaExhausted("Local quota budget reached.")
                 self.units += 1
             try:
                 response = self.session.get(API + resource if is_youtube else USERINFO,
@@ -73,6 +88,10 @@ class YouTube:
                     raise APIError("API requested a longer backoff; rerun later.")
                 time.sleep(delay)
                 continue
+            if response.status_code == 403 and _error_reasons(response) & {"quotaExceeded", "dailyLimitExceeded"}:
+                raise QuotaExhausted("Google daily API quota exceeded; rerun after it resets.")
+            if response.status_code == 404:
+                raise NotFound("API returned HTTP 404.")
             raise APIError(f"API returned HTTP {response.status_code}; check auth/quota in Google Console.")
 
     def delete_subscription(self, subscription_id):

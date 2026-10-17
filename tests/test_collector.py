@@ -15,19 +15,31 @@ def response(payload, status=200):
     return result
 
 
+def google_error(code, reason):
+    return {"error": {"code": code, "message": reason, "errors": [{"reason": reason, "domain": "youtube"}]}}
+
+
 class FakeYouTube:
     """Routes GETs by resource. Synthetic channels only: {channel_id: [video ids, newest first]}."""
 
-    def __init__(self, uploads, page_size=50, missing=()):
+    def __init__(self, uploads, page_size=50, missing=(), quota_after=None, no_playlist=()):
         self.uploads = uploads
         self.page_size = page_size
         self.missing = set(missing)
+        self.quota_after = quota_after  # calls served before Google reports the daily quota spent
+        self.no_playlist = set(no_playlist)  # channels whose uploads playlist 404s (no public videos)
+        self.calls = 0
         self.session = Mock()
         self.session.get.side_effect = self.get
 
     def get(self, url, params=None, **kwargs):
         params = params or {}
         resource = url.rsplit("/", 1)[-1]
+        self.calls += 1
+        if self.quota_after is not None and self.calls > self.quota_after:
+            return response(google_error(403, "quotaExceeded"), 403)
+        if resource == "playlistItems" and params["playlistId"][2:] in self.no_playlist:
+            return response(google_error(404, "playlistNotFound"), 404)
         return response(getattr(self, resource)(params))
 
     def channels(self, params):
@@ -146,13 +158,43 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual(sorted(result.errors), ["chanB", "chanC"])
         self.assertIn("quota", result.errors["chanB"].lower())
 
-    def test_unknown_channel_is_an_error_and_others_still_collect(self):
+    def test_google_quota_exceeded_stops_the_run_and_marks_the_rest_not_attempted(self):
+        fake = FakeYouTube({"chanA": ["v1"], "chanB": ["v2"], "chanC": ["v3"]}, quota_after=3)
+
+        result = collect(YouTube(fake.session), ["chanA", "chanB", "chanC"], now=NOW)
+
+        self.assertEqual([s.channel_id for s in result.samples], ["chanA"])
+        self.assertEqual(sorted(result.errors), ["chanB", "chanC"])
+        self.assertIn("quota", result.errors["chanC"].lower())
+        self.assertEqual(fake.calls, 4)  # the one refused call, then nothing more
+
+    def test_uploads_playlist_not_found_means_no_public_videos_not_a_failure(self):
+        fake = FakeYouTube({"chanA": []}, no_playlist=["chanA"])
+
+        result = collect(YouTube(fake.session), ["chanA"], now=NOW)
+
+        self.assertEqual(result.errors, {})
+        [sample] = result.samples
+        self.assertEqual(sample.videos, [])
+        self.assertEqual(sample.coverage, {"requested": 12, "collected": 0, "unavailable": 0})
+
+    def test_missing_or_private_channel_is_reported_gone_and_others_still_collect(self):
         fake = FakeYouTube({"chanA": ["v1"]})
 
         result = collect(YouTube(fake.session), ["ghost", "chanA"], now=NOW)
 
         self.assertEqual([s.channel_id for s in result.samples], ["chanA"])
-        self.assertEqual(list(result.errors), ["ghost"])
+        self.assertEqual(result.gone, ["ghost"])
+        self.assertEqual(result.errors, {})
+
+    def test_malformed_channel_response_is_an_error_not_gone(self):
+        fake = FakeYouTube({"chanA": ["v1"]})
+        fake.channels = lambda params: {"items": [{"id": params["id"], "snippet": {}}]}
+
+        result = collect(YouTube(fake.session), ["chanA"], now=NOW)
+
+        self.assertEqual(result.gone, [])
+        self.assertEqual(list(result.errors), ["chanA"])
 
     def test_collection_is_get_only_and_search_is_refused(self):
         fake = FakeYouTube({"chanA": ["v1"]})
