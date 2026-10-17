@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Review:** `tidy to-label` lists unlabeled channels to label next, spread across Jev value tiers and confident
+  and unsure answers. The Markdown and HTML reports show Jev's distribution over score levels next to each score.
 - **Evidence:** `collect` stops at the first exhausted quota (local budget or Google's `quotaExceeded`) and lists
   the rest as not attempted, instead of spending one refused request per channel. A channel with no public uploads
   (uploads playlist 404) gives an empty sample, not an error. Deleted or private channels are reported as `gone`

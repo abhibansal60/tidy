@@ -217,9 +217,13 @@ All of these run offline against the local database.
   defaults; unknown keys or bad types are rejected.
 - `python -m tidy propose` turns stored evidence samples and cached judgments
   into proposals (KEEP, WATCH, REVIEW, UNSUBSCRIBE) and prints a Markdown report
-  with signals, dimension values, evidence coverage and links. Policy is
+  with signals, dimension values (with Jev's distribution over score levels),
+  evidence coverage and links. Policy is
   deterministic and versioned; changing `profile.json` or the policy costs no
   Jev calls. Channels without a cached judgment are left out.
+- `python -m tidy to-label [--count 10]` lists unlabeled channels to label next,
+  taken in turn from each Jev value tier and from confident and unsure answers,
+  so the labels do not cover only easy cases.
 - `python -m tidy label CHANNEL_ID keep|drop|unsure [--note ...]` records an owner
   label; `python -m tidy labels import PATH` reads the private
   `{"keep": [...], "sloppy": [...]}` file and matches titles to subscriptions.

@@ -151,7 +151,7 @@ are cached). The same job on a frontier model would be roughly 180 to 300 times 
 | `mail-act` | apply reviewed Trash/Spam proposals from run files |
 | `auth [--write]`, `sync` | YouTube sign-in; fetch subscriptions |
 | `collect`, `judge`, `escalate` | gather evidence; Jev judges; optional second opinion |
-| `propose`, `label`, `gate` | review page; record your verdicts; check the automation gate |
+| `propose`, `to-label`, `label`, `gate` | review page; what to label next; record your verdicts; check the automation gate |
 | `approve`, `unsubscribe`, `act`, `resubscribe` | change YouTube subscriptions (dry run until `--execute`) |
 | `discover` | channels you watch a lot but do not follow |
 | `report`, `purge` | counts; delete data past the 30-day retention |
