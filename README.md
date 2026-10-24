@@ -12,6 +12,29 @@ tested code decides what that verdict is allowed to do, and nothing risky happen
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/tidy-ai/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/abhibansal60/tidy/blob/main/LICENSE)
 
+## Start here: paste this to your agent
+
+Paste into Claude Code, Codex or any coding agent. It installs Tidy, checks your machine without changing anything,
+asks before it writes any config, and ends with a first look at your inbox that changes nothing in Gmail:
+
+```text
+Set up Tidy (https://github.com/abhibansal60/tidy) for me, following its docs/agent-setup.md exactly.
+1. Install: `pipx install tidy-ai` (or `uv tool install tidy-ai`). If I want the source instead, clone the repo and
+   run `pip install -e .` in a virtualenv. Check with `tidy --version`; if another `tidy` answers, use `tidy-ai`.
+2. Look before touching anything, with read-only commands only: `python3 -V`, `command -v pipx uv tidy`,
+   `tidy doctor`. Tell me in a few lines what is there and what is missing.
+3. Ask me before any step that writes config or needs me: which parts I want (Gmail, YouTube or both), my Google
+   email, the Google OAuth client and TypeSafe key steps in my browser, and `tidy init`. I paste the key myself
+   through `--key-stdin`; never print, open or paste my secrets, and never pass one as an argument.
+4. First useful task: after I sign in with `tidy mail-auth`, run
+   `tidy mail-triage --execute --limit 50 --html ~/.tidy/inbox.html` (reads Gmail and calls Jev for a fraction of a cent; changes nothing),
+   summarize `action_counts`, and tell me to open the page.
+Never use --apply, and never run any other --execute command, until I say so in this conversation.
+```
+
+Built for agents: every command prints JSON, `tidy doctor` says exactly what is missing and what to run next,
+every change is a dry run until `--execute`, and secrets go in through a hidden prompt or stdin, never as arguments.
+
 <img src="https://raw.githubusercontent.com/abhibansal60/tidy/main/docs/assets/mail_thumbnail.png" alt="Before: 12,158 unread emails. After: sorted, for 45 cents" width="640">
 
 | | Gmail | YouTube |
@@ -94,19 +117,6 @@ tidy propose --html review.html                       # open it: proposals with 
 To act: `tidy auth --write`, `tidy approve CHANNEL_ID... --note "why"`, `tidy unsubscribe` (dry run), then
 `tidy unsubscribe --execute`. A Google Takeout watch history makes proposals much better: see
 [docs/reference.md](https://github.com/abhibansal60/tidy/blob/main/docs/reference.md).
-
-## Let an agent set it up
-
-Paste into Claude Code, Codex or any coding agent:
-
-```text
-Set up Tidy (pipx package tidy-ai) for me. Follow https://github.com/abhibansal60/tidy/blob/main/docs/agent-setup.md
-exactly. Stop and ask me whenever a step needs my Google account, an API key or a browser. Never print my secrets,
-and never run a command with --execute until I say so.
-```
-
-Built for agents: every command prints JSON, `tidy doctor` says exactly what is missing and what to run next,
-every change is a dry run until `--execute`, and secrets go in through a hidden prompt or stdin, never as arguments.
 
 ## Safety
 
