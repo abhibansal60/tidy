@@ -66,7 +66,11 @@ def main(data_dir=Path(".tidy")):
     if message is None:
         print("nothing needs the owner; silent")
         return 0
-    send(topic_file.read_text().strip(), *message)
+    try:
+        send(topic_file.read_text().strip(), *message)
+    except OSError as error:  # offline or ntfy refused: one line in cron.log, never a traceback (the URL holds the topic)
+        print(f"push failed ({type(error).__name__}); not sent: {message[0]}", file=sys.stderr)
+        return 1
     print(f"sent: {message[0]}")
     return 0
 

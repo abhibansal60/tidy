@@ -1,5 +1,12 @@
-import unittest
+import contextlib
 from datetime import datetime, timedelta, timezone
+import io
+import os
+from pathlib import Path
+import tempfile
+import unittest
+from unittest.mock import patch
+import urllib.error
 
 from tidy import notify
 
@@ -43,3 +50,17 @@ class BuildTests(unittest.TestCase):
 
     def test_fyi_alone_stays_silent(self):
         self.assertIsNone(notify.build(doc([row("a", "HDFC <alerts@hdfc.in>", "REVIEW", "Updates", 0.95)]), NOW))
+
+
+class OfflineTests(unittest.TestCase):
+    def test_failed_push_is_one_line_and_exit_1_not_a_traceback(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.addCleanup(os.chdir, os.getcwd())
+            os.chdir(d)
+            Path(".tidy").mkdir()
+            Path(".tidy/ntfy_topic").write_text("secret-topic")
+            err = io.StringIO()
+            with patch.object(notify, "send", side_effect=urllib.error.URLError("name resolution")), \
+                    contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(notify.main(Path(".tidy")), 1)
+        self.assertEqual(err.getvalue(), "push failed (URLError); not sent: Mail run is stale\n")
