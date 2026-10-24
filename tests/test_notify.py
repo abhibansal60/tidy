@@ -26,6 +26,13 @@ class BuildTests(unittest.TestCase):
         self.assertIn("1 noise to clear", body)
         self.assertEqual(prio, "default")
 
+    def test_archived_counts_only_applied_archives(self):
+        rows = [row("a", "A <a@x.com>"), row("b", "N <n@x.com>", "ARCHIVE", "Updates"),
+                {**row("c", "N <n@x.com>", "ARCHIVE", "Updates"), "outcome": "applied"},
+                {**row("d", "N <n@x.com>", "ARCHIVE", "Updates"), "outcome": "held"}]
+        self.assertIn("1 archived for you", notify.build(doc(rows), NOW)[1])
+        self.assertNotIn("archived", notify.build(doc(rows[:2]), NOW)[1])  # dry run or closed gate: nothing archived
+
     def test_more_than_three_senders_are_summarised(self):
         rows = [row(str(i), f"Sender{i} <s{i}@x.com>", confidence=1 - i / 100) for i in range(5)]
         self.assertIn("+2 more", notify.build(doc(rows), NOW)[1])

@@ -22,7 +22,7 @@ OUTCOME_LABEL = {"applied": "Applied", "held": "Held for review", None: None}
 # Jev is confident it is an update AND the sender is an automated address. Anything else stays in "Needs you".
 FYI_SENDER = re.compile(r"^(no-?reply|do-?not-?reply|alerts?|customernotification|notifications?|credit_cards|help|info|updates?)\b", re.I)
 FYI_MIN_CONFIDENCE = 0.6
-STALE_HOURS = 26
+STALE_HOURS = 50  # page viewed any time: must outlast the gap between runs (daily, or every other day on cron)
 
 JS = JS_TEMPLATE % STALE_HOURS
 

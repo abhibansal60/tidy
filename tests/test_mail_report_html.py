@@ -76,6 +76,9 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(html.count('<section class="card">'), 1)
         self.assertIn("Show 2 more from Shop", html)
 
+    def test_page_is_not_stale_between_every_other_day_runs(self):
+        self.assertIn("if(hrs>50)", m.render([row()], run_at="2026-10-01T16:51:07+00:00"))
+
     def test_health_line_carries_run_time_for_staleness_check(self):
         self.assertIn('data-run-at="2026-10-01T16:51:07+00:00"', m.render([row()], run_at="2026-10-01T16:51:07+00:00"))
 

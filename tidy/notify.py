@@ -15,7 +15,7 @@ from pathlib import Path
 from . import mail_report_html
 
 URL = "https://mail.abhibansal.dev"
-STALE_HOURS = mail_report_html.STALE_HOURS
+STALE_HOURS = 26  # notify runs right after the scheduled triage, so an older newest run means that run failed
 NAMES_SHOWN = 3
 
 
@@ -43,8 +43,9 @@ def build(doc, now=None):
     parts = [f"{len(by['needs_you'])} need you ({shown})"]
     if by["noise"]:
         parts.append(f"{len(by['noise'])} noise to clear")
-    if by["handled"]:
-        parts.append(f"{len(by['handled'])} archived for you")
+    archived = sum(r.get("outcome") == "applied" for r in by["handled"])  # proposed is not done: caps, gate, errors
+    if archived:
+        parts.append(f"{archived} archived for you")
     return f"{len(by['needs_you'])} mails need you", "; ".join(parts), "default"
 
 
