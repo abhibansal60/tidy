@@ -197,6 +197,22 @@ class SelectHeldTests(unittest.TestCase):
         self.assertEqual(select_held([old, new], ["TRASH"]), [])
         self.assertEqual([r["id"] for r in select_held([old, new], ["TRASH"], force_reapply=True)], ["m1"])
 
+    def test_a_message_the_owner_moved_or_starred_is_never_retried(self):
+        # Day 1 proposes TRASH; mail-act finds the owner already archived (or starred) it. If the owner later moves
+        # it back to the inbox, a rerun over the same run files must not trash it.
+        for outcome in ("skipped: no longer in inbox", "skipped: starred since the run"):
+            doc = {"run_at": "2026-09-20", "rows": [{"id": "m1", "action": "TRASH", "outcome": outcome}]}
+
+            self.assertEqual(select_held([doc], ["TRASH"]), [])
+            self.assertEqual([r["id"] for r in select_held([doc], ["TRASH"], force_reapply=True)], ["m1"])
+
+    def test_failed_recheck_or_apply_is_retried(self):
+        doc = {"run_at": "2026-09-20", "rows": [
+            {"id": "m1", "action": "TRASH", "outcome": "skipped: could not recheck (HTTP 500)"},
+            {"id": "m2", "action": "TRASH", "outcome": "error: HTTP 500"}]}
+
+        self.assertEqual([r["id"] for r in select_held([doc], ["TRASH"])], ["m1", "m2"])
+
     def test_returns_the_row_objects_so_outcomes_can_be_recorded_in_place(self):
         doc = {"rows": [{"id": "m1", "action": "SPAM"}]}
 
