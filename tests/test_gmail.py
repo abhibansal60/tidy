@@ -1,9 +1,15 @@
 import base64
+import contextlib
+from pathlib import Path
+import tempfile
 import time
 import unittest
 from unittest.mock import Mock
 
-from tidy.gmail import APIError, Gmail, READ_SCOPE, SCOPES, check_scopes, parse_list_unsubscribe, parse_message, _html_to_text
+import requests
+
+from tidy import gmail
+from tidy.gmail import APIError, Gmail, RETRY_ATTEMPTS, READ_SCOPE, SCOPES, check_scopes, parse_list_unsubscribe, parse_message, _html_to_text
 
 
 def response(payload, status=200):
@@ -265,3 +271,159 @@ class MessageIdTests(unittest.TestCase):
 
         self.assertEqual(api.labels("m1"), ["INBOX", "STARRED"])
         self.assertEqual(session.get.call_args.kwargs["params"], {"format": "minimal"})
+
+
+def rate_limited(reason="rateLimitExceeded", retry_after=None):
+    result = response({"error": {"errors": [{"reason": reason}]}}, status=403)
+    if retry_after is not None:
+        result.headers = {"Retry-After": retry_after}
+    return result
+
+
+class RetryTests(unittest.TestCase):
+    def setUp(self):
+        patcher = unittest.mock.patch("time.sleep")
+        self.sleep = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_get_retries_429_and_5xx_and_counts_every_attempt(self):
+        session = Mock()
+        session.get.side_effect = [response({}, 429), response({}, 503), response({"id": "m1"})]
+        api = Gmail(session)
+
+        self.assertEqual(api.get("messages/m1"), {"id": "m1"})
+        self.assertEqual(api.calls, 3)
+
+    def test_forbidden_that_is_not_a_rate_limit_fails_at_once(self):
+        session = Mock()
+        session.get.return_value = rate_limited("insufficientPermissions")
+        api = Gmail(session)
+
+        with self.assertRaisesRegex(APIError, "HTTP 403"):
+            api.get("profile")
+        self.assertEqual(session.get.call_count, 1)
+
+    def test_retry_after_is_honoured_but_capped(self):
+        session = Mock()
+        session.get.side_effect = [rate_limited(retry_after="7"), rate_limited(retry_after="99999"), response({})]
+
+        Gmail(session).get("profile")
+
+        self.assertEqual([c.args[0] for c in self.sleep.call_args_list], [7.0, 120])
+
+    def test_network_errors_give_up_after_the_retry_budget(self):
+        session = Mock()
+        session.get.side_effect = requests.ConnectionError()
+
+        with self.assertRaisesRegex(APIError, "Network request failed"):
+            Gmail(session).get("profile")
+        self.assertEqual(session.get.call_count, RETRY_ATTEMPTS)
+
+    def test_bad_json_or_shape_is_an_api_error(self):
+        session = Mock()
+        session.get.return_value = response(None)
+        session.get.return_value.json.side_effect = ValueError()
+        with self.assertRaisesRegex(APIError, "invalid JSON"):
+            Gmail(session).get("profile")
+        session.get.return_value = response(["not", "a", "dict"])
+        with self.assertRaisesRegex(APIError, "response shape"):
+            Gmail(session).get("profile")
+
+    def test_userinfo_does_not_spend_the_gmail_budget(self):
+        session = Mock()
+        session.get.return_value = response({"email": "owner@example.com", "email_verified": True, "sub": "1"})
+        api = Gmail(session, max_calls=1)
+
+        api.identity("owner@example.com")
+
+        self.assertEqual(api.calls, 0)
+
+    def test_batch_modify_retries_then_reports_a_safe_rerun(self):
+        session = Mock()
+        session.post.side_effect = [response({}, 500), response(None, 204)]
+        Gmail(session).batch_modify(["a"], remove=["INBOX"])
+        self.assertEqual(session.post.call_count, 2)
+
+        session = Mock()
+        session.post.side_effect = requests.ConnectionError()
+        with self.assertRaisesRegex(APIError, "rerun is safe"):
+            Gmail(session).batch_modify(["a"], remove=["INBOX"])
+        self.assertEqual(session.post.call_count, RETRY_ATTEMPTS)
+
+    def test_mutations_stop_at_the_call_budget_including_retries(self):
+        session = Mock()
+        session.post.return_value = response({}, 503)
+        api = Gmail(session, max_calls=2)
+
+        with self.assertRaisesRegex(APIError, "budget"):
+            api.trash("m1")
+        self.assertEqual(session.post.call_count, 2)
+        with self.assertRaisesRegex(APIError, "budget"):
+            api.batch_modify(["a"], remove=["INBOX"])
+        self.assertEqual(session.post.call_count, 2)
+
+    def test_trash_network_failure_gives_up_after_the_retry_budget(self):
+        session = Mock()
+        session.post.side_effect = requests.ConnectionError()
+
+        with self.assertRaisesRegex(APIError, "trash is idempotent"):
+            Gmail(session).trash("m1")
+
+    def test_batch_modify_refuses_more_than_1000_ids(self):
+        with self.assertRaises(ValueError):
+            Gmail(Mock()).batch_modify([f"m{i}" for i in range(1001)], remove=["INBOX"])
+
+
+class IdentityTests(unittest.TestCase):
+    def identity(self, user):
+        session = Mock()
+        session.get.return_value = response(user)
+        return Gmail(session).identity("Owner@Example.com")
+
+    def test_matching_verified_email_returns_subject(self):
+        self.assertEqual(self.identity({"email": "owner@example.com", "email_verified": True, "sub": "42"}),
+                         {"google_sub": "42", "email": "owner@example.com"})
+
+    def test_other_or_unverified_account_is_refused(self):
+        for user in ({"email": "other@example.com", "email_verified": True, "sub": "1"},
+                     {"email": "owner@example.com", "email_verified": False, "sub": "1"}):
+            with self.assertRaisesRegex(APIError, "does not match"):
+                self.identity(user)
+
+
+class ConnectTests(unittest.TestCase):
+    def test_missing_token_names_the_fix(self):
+        with self.assertRaisesRegex(ValueError, "mail-auth --write"):
+            with gmail.connect("/nonexistent/token_mail_write.json", write=True):
+                pass
+        with self.assertRaisesRegex(ValueError, "Run mail-auth first"):
+            with gmail.connect("/nonexistent/token_mail.json"):
+                pass
+
+    def test_checks_the_account_and_saves_the_token_on_exit(self):
+        with tempfile.TemporaryDirectory() as d:
+            token = Path(d) / "token_mail.json"
+            token.write_text("{}")
+            session = Mock()
+            session.get.return_value = response({"email": "owner@example.com", "email_verified": True, "sub": "1"})
+            with unittest.mock.patch.object(gmail, "load_credentials", return_value="creds") as load, \
+                    unittest.mock.patch.object(gmail, "session_for", return_value=contextlib.nullcontext(session)), \
+                    unittest.mock.patch.object(gmail, "save_credentials") as save:
+                with gmail.connect(token, "owner@example.com", max_calls=5) as api:
+                    self.assertEqual(api.max_calls, 5)
+            load.assert_called_once_with(token, False)
+            save.assert_called_once_with(token, "creds", False)
+
+    def test_wrong_account_raises_and_does_not_save(self):
+        with tempfile.TemporaryDirectory() as d:
+            token = Path(d) / "token_mail_write.json"
+            token.write_text("{}")
+            session = Mock()
+            session.get.return_value = response({"email": "other@example.com", "email_verified": True, "sub": "1"})
+            with unittest.mock.patch.object(gmail, "load_credentials", return_value="creds"), \
+                    unittest.mock.patch.object(gmail, "session_for", return_value=contextlib.nullcontext(session)), \
+                    unittest.mock.patch.object(gmail, "save_credentials") as save:
+                with self.assertRaises(APIError):
+                    with gmail.connect(token, "owner@example.com", write=True):
+                        self.fail("must not yield a client for another account")
+            save.assert_not_called()
