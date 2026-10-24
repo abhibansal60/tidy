@@ -38,9 +38,14 @@ def run_act(db, api, email, args, config):
     proposals = [Proposal(**p) for p in json.loads(args.proposals.read_text())]
     gates = {"UNSUBSCRIBE": args.gate_unsubscribe, "SUBSCRIBE": args.gate_subscribe}
     if args.execute and any(gates.values()) and not args.override_gate:
-        status = review.gate_status(review.agreement(db, review.derive(db, config)[0]), config)
-        if not status["open"]:
-            raise ValueError("Calibration gate closed: " + "; ".join(status["reasons"]) + ". Pass --override-gate to act anyway.")
+        derived = review.derive(db, config)[0]
+        if args.per_action_gate:
+            per = review.action_gates(db, derived, config)
+            reasons = [f"{a}: " + "; ".join(per[a]["gate"]["reasons"]) for a, on in gates.items() if on and not per[a]["gate"]["open"]]
+        else:
+            reasons = review.gate_status(review.agreement(db, derived), config)["reasons"]
+        if reasons:
+            raise ValueError("Calibration gate closed: " + "; ".join(reasons) + ". Pass --override-gate to act anyway.")
     caps = {"unsubscribe": config["caps"]["unsubscribe"] if args.cap_unsubscribe is None else args.cap_unsubscribe,
             "subscribe": config["caps"]["subscribe"] if args.cap_subscribe is None else args.cap_subscribe}
     return mutate.act(db, api, proposals, gates, caps, email, args.execute)
@@ -89,8 +94,11 @@ def main(argv=None):
                 return 0
         elif args.command == "gate":
             config = profile.load(args.data_dir / "profile.json")
-            stats = review.agreement(db, review.derive(db, config)[0])
+            proposals = review.derive(db, config)[0]
+            stats = review.agreement(db, proposals)
             output = {**stats, "gate": review.gate_status(stats, config)}
+            if args.per_action:
+                output["per_action"] = review.action_gates(db, proposals, config)
         elif args.command == "to-label":
             proposals, judgments, samples = review.derive(db, profile.load(args.data_dir / "profile.json"))
             by_p, by_s = {p.channel_id: p for p in proposals}, {s.channel_id: s for s in samples}
