@@ -202,6 +202,35 @@ class ActTests(unittest.TestCase):
         session.delete.assert_not_called()
         self.assertEqual(self.db.execute("SELECT status FROM auto_actions").fetchone()[0], "failed")
 
+    def test_refused_mutation_stops_the_run_and_is_audited_as_failed(self):
+        api, session = api_with([item("a"), item("b")], post=[reply(403, "forbidden")])
+        with self.assertRaises(APIError) as caught:
+            self.act([prop("z", "SUBSCRIBE"), prop("a", "UNSUBSCRIBE")], api, execute=True)
+        self.assertNotIsInstance(caught.exception, UnknownOutcome)
+        session.delete.assert_not_called()  # nothing after the failure
+        self.assertEqual(self.db.execute("SELECT status FROM auto_actions").fetchone()[0], "failed")
+        self.assertEqual(self.db.execute("SELECT count(*) FROM audit_events WHERE event='auto_subscribe_failed'")
+                         .fetchone()[0], 1)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM trials").fetchone()[0], 0)
+
+    def test_failed_resubscribe_is_audited_and_keeps_the_row_restorable(self):
+        api, _ = api_with([item("a")])
+        self.act([prop("a", "UNSUBSCRIBE")], api, execute=True)
+        api, _ = api_with([item("b")], post=[reply(403, "forbidden")])
+        with self.assertRaises(APIError):
+            mutate.resubscribe(self.db, api, ["a"], True, "owner@example.com")
+        detail = self.db.execute("SELECT detail FROM audit_events WHERE event='resubscribe_failed'").fetchone()[0]
+        self.assertTrue(detail.startswith("a: "))
+        self.assertEqual(mutate.resubscribe(self.db, None, ["a"], False)["would"][0]["channel_id"], "a")
+
+    def test_resubscribe_skips_a_channel_already_back(self):
+        api, _ = api_with([item("a")])
+        self.act([prop("a", "UNSUBSCRIBE")], api, execute=True)
+        api, session = api_with([item("a", "manual-back")])
+        out = mutate.resubscribe(self.db, api, ["a"], True, "owner@example.com")
+        self.assertEqual(out["results"], [("a", "already_subscribed")])
+        session.post.assert_not_called()
+
     def test_trials_due_lists_only_ended_trials(self):
         api, _ = api_with([item("a")], post=[reply(200, sub_id="s")])
         self.act([prop("z", "SUBSCRIBE")], api, execute=True, trial_days=30)
