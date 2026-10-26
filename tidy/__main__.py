@@ -38,12 +38,10 @@ def run_act(db, api, email, args, config):
     proposals = [Proposal(**p) for p in json.loads(args.proposals.read_text())]
     gates = {"UNSUBSCRIBE": args.gate_unsubscribe, "SUBSCRIBE": args.gate_subscribe}
     if args.execute and any(gates.values()) and not args.override_gate:
-        derived = review.derive(db, config)[0]
-        if args.per_action_gate:
-            per = review.action_gates(db, derived, config)
-            reasons = [f"{a}: " + "; ".join(per[a]["gate"]["reasons"]) for a, on in gates.items() if on and not per[a]["gate"]["open"]]
-        else:
-            reasons = review.gate_status(review.agreement(db, derived), config)["reasons"]
+        reasons = review.gate_status(review.agreement(db, review.derive(db, config)[0]), config)["reasons"]
+        if args.per_action_gate:  # in addition to the pooled gate, and measured on the proposals this run executes
+            per = review.action_gates(db, proposals, config)
+            reasons += [f"{a}: " + "; ".join(per[a]["gate"]["reasons"]) for a, on in gates.items() if on and not per[a]["gate"]["open"]]
         if reasons:
             raise ValueError("Calibration gate closed: " + "; ".join(reasons) + ". Pass --override-gate to act anyway.")
     caps = {"unsubscribe": config["caps"]["unsubscribe"] if args.cap_unsubscribe is None else args.cap_unsubscribe,

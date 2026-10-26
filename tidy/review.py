@@ -55,13 +55,13 @@ def import_label_file(db, path):
     return {"imported": imported, "unmatched": unmatched}
 
 
-def agreement(db, proposals, held_out=None):
+def agreement(db, proposals, held_out=None, agrees=AGREES):
     labels, n, agreements = current_labels(db), 0, 0
     for p in proposals:
         verdict = labels.get(p.channel_id)
-        if p.action in AGREES and verdict in ("keep", "drop") and (held_out is None or p.channel_id in held_out):
+        if p.action in agrees and verdict in ("keep", "drop") and (held_out is None or p.channel_id in held_out):
             n += 1
-            agreements += AGREES[p.action] == verdict
+            agreements += agrees[p.action] == verdict
     return {"n": n, "agreements": agreements, "rate": agreements / n if n else None}
 
 
@@ -85,11 +85,9 @@ def held_out(channel_id):
 def action_gates(db, proposals, profile):
     """Per action type (ADR 0005): the precision of that action's proposals against held-out keep/drop labels.
     KEEP matches alone cannot open the unsubscribe gate here, and SUBSCRIBE needs labels of its own."""
-    labels, gates = current_labels(db), {}
-    for action, agrees in GATED.items():
-        votes = [labels[p.channel_id] == agrees for p in proposals
-                 if p.action == action and labels.get(p.channel_id) in ("keep", "drop") and held_out(p.channel_id)]
-        stats = {"n": len(votes), "agreements": sum(votes), "rate": sum(votes) / len(votes) if votes else None}
+    gates = {}
+    for action, verdict in GATED.items():
+        stats = agreement(db, [p for p in proposals if held_out(p.channel_id)], agrees={action: verdict})
         gates[action] = {**stats, "gate": gate_status(stats, profile)}
     return gates
 

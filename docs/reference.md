@@ -178,8 +178,8 @@ records its subscription ID, channel and title so `resubscribe` can restore it.
 
 `--execute` refuses a closed calibration gate unless `--override-gate` is passed. By
 default that is the pooled agreement from `tidy gate`, which KEEP matches alone can
-open. `--per-action-gate` checks each opened action's own gate instead
-(`tidy gate --per-action`; why: `docs/options/gated-auto-actions.md`).
+open. `--per-action-gate` also requires each opened action's own gate, on the
+`--proposals` file (`tidy gate --per-action`; why: `docs/options/gated-auto-actions.md`).
 
 ## Evidence pilot
 
@@ -235,9 +235,8 @@ All of these run offline against the local database.
 - `python -m tidy gate` prints agreement between proposals and your labels
   (REVIEW and unsure labels are excluded) and whether the calibration gate is
   open: at least 30 labels and 85% agreement by default. `--per-action` adds the
-  per-action gate: for UNSUBSCRIBE (and SUBSCRIBE), the share of that action's
-  proposals you labeled drop (keep), counting only a fixed third of channels chosen
-  by hash (`review.held_out`). Tune thresholds on the other two thirds.
+  per-action gate: the share of UNSUBSCRIBE (SUBSCRIBE) proposals you labeled drop
+  (keep), on a fixed third of channels (`review.held_out`). Tune on the other two.
 
 ## Labeling from a sheet
 

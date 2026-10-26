@@ -1,4 +1,4 @@
-"""Per-action calibration gate (ADR 0005, docs/options/gated-auto-actions.md): behind `--per-action-gate`."""
+"""Per-action calibration gate (ADR 0005, docs/options/gated-auto-actions.md): added by `--per-action-gate`."""
 
 import argparse
 import contextlib
@@ -78,31 +78,49 @@ class ActionGateTests(LabelDb):
 
 
 class RunActGateTests(LabelDb):
-    """`act --execute`: the per-action check replaces the pooled one only with --per-action-gate."""
+    """`act --execute`: --per-action-gate adds the per-action check, on the --proposals file, to the pooled one."""
 
-    def args(self, **kw):
+    def args(self, file_proposals, **kw):
         path = Path(self.temp.name) / "p.json"
-        path.write_text(json.dumps([{"channel_id": HELD[0], "action": "UNSUBSCRIBE", "signals": ["a", "b"]}]))
+        path.write_text(json.dumps([{"channel_id": p.channel_id, "action": p.action, "signals": p.signals}
+                                    for p in file_proposals]))
         base = dict(command="act", proposals=path, gate_unsubscribe=True, gate_subscribe=False, execute=True,
                     override_gate=False, per_action_gate=False, cap_unsubscribe=None, cap_subscribe=None)
         return argparse.Namespace(**{**base, **kw})
 
-    def run_act(self, proposals, **kw):
-        with patch.object(review, "derive", return_value=(proposals, [], [])), \
+    def run_act(self, derived, file_proposals=None, **kw):
+        """derived: what review.derive returns (pooled gate); file_proposals: the --proposals file (default: same)."""
+        args = self.args(derived if file_proposals is None else file_proposals, **kw)
+        with patch.object(review, "derive", return_value=(derived, [], [])), \
                 patch("tidy.mutate.act", return_value={"acted": True}) as act:
-            return run_act(self.db, None, "owner@example.com", self.args(**kw), CONFIG), act
+            return run_act(self.db, None, "owner@example.com", args, CONFIG), act
 
     def test_without_the_flag_the_pooled_gate_still_decides(self):
-        out, act = self.run_act(self.labeled([(c, "KEEP", "keep") for c in HELD[:30]]))
+        out, act = self.run_act(self.labeled([(c, "KEEP", "keep") for c in HELD[:30]]),
+                                [prop(HELD[30], "UNSUBSCRIBE")])
 
         self.assertEqual(out, {"acted": True})
         act.assert_called_once()
 
     def test_flag_refuses_unsubscribe_when_only_keep_matches_exist(self):
-        proposals = self.labeled([(c, "KEEP", "keep") for c in HELD[:30]])
+        derived = self.labeled([(c, "KEEP", "keep") for c in HELD[:30]])
 
         with self.assertRaisesRegex(ValueError, "UNSUBSCRIBE: 0 labels, need 30"):
-            self.run_act(proposals, per_action_gate=True)
+            self.run_act(derived, [prop(HELD[30], "UNSUBSCRIBE")], per_action_gate=True)
+
+    def test_flag_never_opens_what_the_pooled_gate_refuses(self):
+        derived = self.labeled([(c, "KEEP", "drop") for c in HELD[:30]])  # pooled agreement 0/30
+        executed = self.labeled([(c, "UNSUBSCRIBE", "drop") for c in HELD[30:60]])  # per-action 30/30
+
+        with self.assertRaisesRegex(ValueError, "agreement 0.00, need 0.85"):
+            self.run_act(derived, executed, per_action_gate=True)
+
+    def test_flag_measures_the_proposals_file_not_a_fresh_derive(self):
+        derived = self.labeled([(c, "UNSUBSCRIBE", "drop") for c in HELD[:30]])  # would open both gates
+        stale = self.labeled([(c, "UNSUBSCRIBE", "keep") for c in HELD[30:60]])  # what would actually run
+
+        with self.assertRaisesRegex(ValueError, "UNSUBSCRIBE: agreement 0.00"):
+            self.run_act(derived, stale, per_action_gate=True)
 
     def test_flag_checks_only_the_gates_the_owner_opened(self):
         proposals = self.labeled([(c, "UNSUBSCRIBE", "drop") for c in HELD[:30]])
@@ -119,15 +137,16 @@ class RunActGateTests(LabelDb):
         act.assert_called_once()
 
 
-
 class GateCliTests(unittest.TestCase):
+    def gate(self, d, *flags):
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(main(["--data-dir", d, "gate", *flags]), 0)
+        return json.loads(out.getvalue())
+
     def test_gate_per_action_adds_both_action_types(self):
-        with tempfile.TemporaryDirectory() as d, contextlib.redirect_stdout(io.StringIO()) as out:
-            self.assertEqual(main(["--data-dir", d, "gate", "--per-action"]), 0)
-            self.assertEqual(main(["--data-dir", d, "gate"]), 0)
-        with_flag, without = out.getvalue().split("\n}\n")[:2]
-        self.assertEqual(set(json.loads(with_flag + "}")["per_action"]), {"UNSUBSCRIBE", "SUBSCRIBE"})
-        self.assertNotIn("per_action", without)
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(set(self.gate(d, "--per-action")["per_action"]), {"UNSUBSCRIBE", "SUBSCRIBE"})
+            self.assertNotIn("per_action", self.gate(d))
 
 
 if __name__ == "__main__":

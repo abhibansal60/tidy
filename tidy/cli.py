@@ -81,7 +81,7 @@ def build_parser():
     act.add_argument("--cap-unsubscribe", type=int, default=None, help="Per-run cap (default: profile caps, 5)")
     act.add_argument("--cap-subscribe", type=int, default=None, help="Per-run cap (default: profile caps, 3)")
     act.add_argument("--override-gate", action="store_true", help="Act although the calibration gate is closed (owner override)")
-    act.add_argument("--per-action-gate", action="store_true", help="Check each opened action's own gate (precision on held-out labels) instead of the pooled agreement")
+    act.add_argument("--per-action-gate", action="store_true", help="Also require each opened action's own gate (precision on held-out labels of the --proposals file), on top of the pooled agreement")
     act.add_argument("--execute", action="store_true")
     act.add_argument("--max-units", type=int, default=500)
     mail_auth = commands.add_parser("mail-auth", help="Authorize Gmail and verify configured Google email")
