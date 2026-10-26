@@ -1,5 +1,4 @@
 import contextlib
-from datetime import datetime, timezone
 import io
 import json
 from pathlib import Path
@@ -19,7 +18,7 @@ class PilotTests(unittest.TestCase):
         self.db = store.connect(self.root / "inventory.sqlite3")
         # last_seen is real time: store.connect drops subscriptions not seen in the last 30 days of the real clock,
         # so a fixed NOW here made the CLI test fail once NOW was 30 days old.
-        seen = datetime.now(timezone.utc).isoformat()
+        seen = store.now()
         with self.db:
             for cid, title in [("chanA", "Alpha Channel"), ("chanB", "Beta Channel"), ("chanC", "Gamma")]:
                 self.db.execute("INSERT INTO subscriptions VALUES (?, ?, ?, NULL, 1, ?)",
