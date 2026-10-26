@@ -14,21 +14,22 @@ tested code decides what that verdict is allowed to do, and nothing risky happen
 
 ## Start here: paste this to your agent
 
-Paste into Claude Code, Codex or any coding agent. It installs Tidy, checks your machine without changing anything,
-asks before it writes any config, and ends with a first look at your inbox that changes nothing in Gmail:
+Paste into Claude Code, Codex or any coding agent. It checks your machine, installs Tidy, asks before it writes any
+config, and ends with a first look at your inbox (or channels) that changes nothing in your account:
 
 ```text
-Set up Tidy (https://github.com/abhibansal60/tidy) for me, following its docs/agent-setup.md exactly.
-1. Install: `pipx install tidy-ai` (or `uv tool install tidy-ai`). If I want the source instead, clone the repo and
-   run `pip install -e .` in a virtualenv. Check with `tidy --version`; if another `tidy` answers, use `tidy-ai`.
-2. Look before touching anything, with read-only commands only: `python3 -V`, `command -v pipx uv tidy`,
-   `tidy doctor`. Tell me in a few lines what is there and what is missing.
-3. Ask me before any step that writes config or needs me: which parts I want (Gmail, YouTube or both), my Google
-   email, the Google OAuth client and TypeSafe key steps in my browser, and `tidy init`. I paste the key myself
-   through `--key-stdin`; never print, open or paste my secrets, and never pass one as an argument.
-4. First useful task: after I sign in with `tidy mail-auth`, run
-   `tidy mail-triage --execute --limit 50 --html ~/.tidy/inbox.html` (reads Gmail and calls Jev for a fraction of a cent; changes nothing),
-   summarize `action_counts`, and tell me to open the page.
+Set up Tidy (https://github.com/abhibansal60/tidy) for me, following its docs/agent-setup.md; it wins if we differ.
+1. Look first, read-only: `python3 -V` (needs 3.11+), `command -v pipx uv tidy`. Then install with
+   `pipx install tidy-ai` (or `uv tool install tidy-ai`), check `tidy --version` (if another `tidy` answers, use
+   `tidy-ai`), run `tidy doctor` and tell me in a few lines what is there and what is missing.
+2. Ask me before any step that writes config or needs me: which parts I want (Gmail, YouTube or both), my Google
+   email, and the Google OAuth client and TypeSafe key steps in my browser.
+3. Give me the `tidy init ... --key-stdin` command (with `--no-mail` if I want YouTube only) and let me run it in my
+   own terminal so I paste the key myself. Never print, open or paste my secrets, and never pass one as an argument.
+4. First useful task, changing nothing in my account. Gmail: after I sign in with `tidy mail-auth`, run
+   `tidy mail-triage --execute --limit 200 --html ~/.tidy/inbox.html --json ~/.tidy/runs/first.json`
+   (reads Gmail and calls Jev for under a cent; changes nothing), summarize `action_counts`, tell me to open the page.
+   YouTube only: after I sign in with `tidy auth`, run `tidy sync` and `tidy collect --all` (a dry run) and summarize.
 Never use --apply, and never run any other --execute command, until I say so in this conversation.
 ```
 
