@@ -49,7 +49,11 @@ act --execute --gate-subscribe     needs gate[SUBSCRIBE] open
 - Gain: the gate measures the action it unlocks. A wrong unsubscribe is the costly mistake, and precision is exactly
   that rate. The split needs no storage, and owner labels stay untouched (they never expire).
 - Risk: the owner may tune thresholds while looking at all labels, including the held-out third. Document "tune on
-  the other two thirds" in `docs/reference.md`; code cannot enforce it.
+  the other two thirds" in `docs/reference.md`; code cannot enforce it. The split does not clean today's labels:
+  policy-2 was tuned while looking at all 66, so their held-out third is as in-sample as the rest. Only labels given
+  after the policy is fixed are truly held out (Design C does that by construction).
+- Risk: owner labels are on subscriptions, and SUBSCRIBE proposals are for channels the owner is not subscribed to,
+  so they rarely carry a label. gate[SUBSCRIBE] stays closed until candidates get a label source of their own.
 
 ## Design B: per-action precision on all labels
 
@@ -74,10 +78,11 @@ and held out by construction.
 ## Recommendation
 
 **A**, behind a flag first (`tidy gate --per-action`, `tidy act --per-action-gate`), so today's behaviour is unchanged
-until the owner flips it. A only makes `act --execute` refuse more often; it never makes a mutation more likely, so it
-is safe to ship. Make it the default after the owner agrees, then delete the pooled check. Add a
-`tidy trials` command that prints `mutate.trials_due` (small, separate PR). Consider C only if Tidy gets regular use
-again.
+until the owner flips it. Under the flag the per-action gate is checked in addition to the pooled one, so it only makes
+`act --execute` refuse more often and never makes a mutation more likely; that is what makes it safe to ship. Making
+it the default and deleting the pooled check is a later owner decision, because then the per-action gate alone decides.
+Add a `tidy trials` command that prints `mutate.trials_due` (small, separate PR). Consider C only if Tidy gets regular
+use again.
 
 ## Mail (outside ADR 0005)
 

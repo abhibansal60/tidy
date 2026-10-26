@@ -12,9 +12,9 @@ against owner labels.
 What the experiment has shown (`docs/guide/jev-playbook.md`, project notes 2026-09-21):
 
 - `titles-desc-v1` costs 54% more input tokens than `titles-v1`, with no clear gain.
-- No Jev dimension predicts the owner's keep/drop labels: AUC 0.32 to 0.52 on 66 blind relabels. The owner agrees
-  with their own earlier labels 85% of the time, so label noise does not explain the result. Watch history does
-  better (AUC 0.65 to 0.69).
+- No model predicts the owner's keep/drop labels: all 8, Jev included, scored AUC 0.43 to 0.52 on 66 labels. A blind
+  relabel of 13 agreed with the earlier labels 10 times (about 77%), which caps how well anything can score. The
+  watch-history count did better (AUC 0.69, interval 0.59 to 0.80).
 
 So a larger two-schema run would mostly measure how stable Jev is **between schemas**, not whether either schema is
 **right**. Any public write-up has to say that.
@@ -41,14 +41,19 @@ Record the result above in the playbook, close #3, and leave the code as it is.
 
 One small PR, then one run the owner approves:
 
-1. **Schema fingerprint.** `schema_hash = sha256(json(questions, rendering flags))[:12]` goes into the judgment and
-   the cache key, so an edited question can never reuse old answers under the same id.
-2. **Pin the model.** A `model` key in `profile.json`, passed to `system_one`. A different `reply.model` is an error,
-   not silent drift.
+1. **Schema fingerprint.** `schema_hash = sha256(json.dumps({id: q.model_dump(mode="json")}, sort_keys=True), plus
+   rendering flags)[:12]` goes into the judgment and the cache key, so an edited question can never reuse old answers
+   under the same id. The questions are pydantic `Score` objects, so plain `json.dumps` cannot hash them. Changing the
+   cache key misses the cache once for every channel: the next judge run re-calls Jev (about 110 calls per schema).
+2. **Pin the model.** A `model` key in `profile.json` holding a concrete model name, not an alias, passed to
+   `system_one`. A `reply.model` different from a concrete pin is an error, not silent drift; with an alias the reply
+   may name the resolved model, so only record it.
 3. **Keep distributions.** `_values` keeps `probabilities`.
-4. **Held-out metric.** Use the same deterministic third as the gate design (`sha256(channel_id) mod 3 == 0`, see
-   `docs/options/gated-auto-actions.md`). Per schema, report AUC of each dimension on held-out labels by reusing
-   `evals.labeled_accuracy.score`.
+4. **Label metric.** Per schema, report AUC of each dimension on labels **outside** the gate's held-out third
+   (`sha256(channel_id) mod 3 != 0`, see `docs/options/gated-auto-actions.md`): choosing a schema is tuning, and
+   tuning on the gate's third would make the gate in-sample again. `evals.labeled_accuracy.score` needs an adapter
+   first: it reads flat numbers for three fixed dimensions (runner values are `{score, confidence}`, and `titles-v2`
+   adds `watch_likelihood`), and `auc`/`bootstrap_ci` crash when a sample has only keep or only drop labels.
 5. **Report file.** One 0600 JSON per run under the data dir (`experiments/<UTC stamp>.json`), never in Git.
 
 Run protocol: `tidy judge --schemas titles-v1 titles-v2` as a dry run (offline cost), then 8 channels the owner picks
@@ -57,7 +62,7 @@ from both keep and drop labels. Stop for review. A full run happens only after t
 - Cost: about a day of work, plus a few cents of Jev calls for 8 channels × 2 schemas.
 - Gain: every future number is reproducible (fixed schema hash, fixed model, held-out labels). `titles-v2` (watch
   fit) is the one schema aimed at what the labels track, so it is the only comparison worth paying for.
-- Risk: the held-out third of 66 labels is about 22 channels, so the intervals stay wide. Say so in any write-up.
+- Risk: 8 channels give a handful of labels, so the intervals stay wide (or undefined). Say so in any write-up.
 
 ## Design C: general experiment harness
 
@@ -71,7 +76,7 @@ folded together with the `evals/` scripts.
 
 ## Recommendation
 
-**B, items 1 and 3 first.** They are cheap and close a silent-reuse trap and a reporting gap, and they need no owner
-data. Items 2, 4 and 5 and the 8-channel run should wait for the owner's go-ahead, because they spend Jev calls and
-read private labels. If the owner does not want another run, take **A** and close #3, keeping items 1 and 3 as a
-separate cleanup.
+**B, item 3 first.** It is cheap, closes a reporting gap and needs no owner data. Item 1 is cheap to write but its
+first run re-calls Jev for every channel, so merge it just before an approved run. Items 2, 4 and 5 and the 8-channel
+run should wait for the owner's go-ahead, because they spend Jev calls and read private labels.
+If the owner does not want another run, take **A** and close #3, keeping items 1 and 3 as a separate cleanup.
