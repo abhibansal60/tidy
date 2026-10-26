@@ -74,8 +74,8 @@ class MainTests(unittest.TestCase):
 
     def test_newest_run_file_by_date_is_used(self):
         (self.root / ".tidy/ntfy_topic").write_text("topic-123\n")
-        self.write_run("2026-10-01.json", [row("a", "Old <o@x.com>")])
         self.write_run("2026-10-02.json", [row("b", "New <n@x.com>")])
+        self.write_run("2026-10-01.json", [row("a", "Old <o@x.com>")])  # written last: newest by name, not mtime
         self.write_run("notes.json", [row("c", "Ignored <i@x.com>")])
 
         send = self.main()

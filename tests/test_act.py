@@ -209,6 +209,8 @@ class ActTests(unittest.TestCase):
         self.assertNotIsInstance(caught.exception, UnknownOutcome)
         session.delete.assert_not_called()  # nothing after the failure
         self.assertEqual(self.db.execute("SELECT status FROM auto_actions").fetchone()[0], "failed")
+        self.assertEqual(self.db.execute("SELECT count(*) FROM audit_events WHERE event='auto_subscribe_failed'")
+                         .fetchone()[0], 1)
         self.assertEqual(self.db.execute("SELECT count(*) FROM trials").fetchone()[0], 0)
 
     def test_failed_resubscribe_is_audited_and_keeps_the_row_restorable(self):

@@ -227,8 +227,7 @@ class TrashTests(unittest.TestCase):
 
     def test_rate_limit_retries_then_succeeds(self):
         session = Mock()
-        limited = response({"error": {"errors": [{"reason": "rateLimitExceeded"}]}}, status=403)
-        session.post.side_effect = [limited, response(None, status=200)]
+        session.post.side_effect = [rate_limited(), response(None, status=200)]
         api = Gmail(session)
 
         with unittest.mock.patch("time.sleep"):
@@ -368,6 +367,7 @@ class RetryTests(unittest.TestCase):
 
         with self.assertRaisesRegex(APIError, "trash is idempotent"):
             Gmail(session).trash("m1")
+        self.assertEqual(session.post.call_count, RETRY_ATTEMPTS)
 
     def test_batch_modify_refuses_more_than_1000_ids(self):
         with self.assertRaises(ValueError):
@@ -413,6 +413,7 @@ class ConnectTests(unittest.TestCase):
                     self.assertEqual(api.max_calls, 5)
             load.assert_called_once_with(token, False)
             save.assert_called_once_with(token, "creds", False)
+            self.assertEqual(session.get.call_args.args[0], gmail.USERINFO)
 
     def test_wrong_account_raises_and_does_not_save(self):
         with tempfile.TemporaryDirectory() as d:

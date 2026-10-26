@@ -11,15 +11,16 @@ from unittest.mock import Mock, patch
 
 from tidy.__main__ import main
 from tidy.gmail import Gmail
+from test_gmail import response
 from test_mail_triage import CATEGORY, OWNER, SubjectClient, inbox
 
 
 class FakeGmail:
     """`gmail.connect` stand-in: records which tokens were opened and hands out a read or write fake."""
-    def __init__(self, read=None, live_labels=None):
-        self.read = read or inbox()
+    def __init__(self):
+        self.read = inbox()
         self.write = Mock(calls=0, max_calls=1000)
-        self.write.labels.side_effect = lambda i: (live_labels or {}).get(i, ["INBOX"])
+        self.write.labels.return_value = ["INBOX"]
         self.opened = []
 
     @contextlib.contextmanager
@@ -47,8 +48,8 @@ class MailCliTests(unittest.TestCase):
             code = main(["--data-dir", str(self.root), *args])
         return code, out.getvalue(), err.getvalue()
 
-    def triage(self, *flags, run="run.json"):
-        return self.run_cli("mail-triage", "--execute", "--json", str(self.root / run), *flags)
+    def triage(self, *flags):
+        return self.run_cli("mail-triage", "--execute", "--json", str(self.root / "run.json"), *flags)
 
 
 class MailTriageCliTests(MailCliTests):
@@ -165,19 +166,22 @@ class MailActCliTests(MailCliTests):
         self.gmail.write.batch_modify.assert_not_called()
 
     def test_hand_edited_id_is_refused_before_any_change(self):
-        run = self.held_run()
-        doc = json.loads(run.read_text())
-        next(r for r in doc["rows"] if r["id"] == "promo")["id"] = "../profile"
-        run.write_text(json.dumps(doc))
-        session = Mock()
-        self.gmail.write = Gmail(session)  # the real client, so the real ID check runs
+        for tampered in ("promo", "spam"):  # first and last held row: the later one is reached after a live read
+            with self.subTest(tampered=tampered):
+                run = self.held_run()
+                doc = json.loads(run.read_text())
+                next(r for r in doc["rows"] if r["id"] == tampered)["id"] = "../profile"
+                run.write_text(json.dumps(doc))
+                session = Mock()
+                session.get.return_value = response({"labelIds": ["INBOX"]})
+                self.gmail.write = Gmail(session)  # the real client, so the real ID check runs
 
-        code, _, err = self.run_cli("mail-act", "--run", str(run), "--execute")
+                code, _, err = self.run_cli("mail-act", "--run", str(run), "--execute")
 
-        self.assertEqual(code, 1)
-        self.assertIn("Invalid Gmail message ID", err)
-        session.get.assert_not_called()
-        session.post.assert_not_called()
+                self.assertEqual(code, 1)
+                self.assertIn("Invalid Gmail message ID", err)
+                session.post.assert_not_called()
+                self.gmail = FakeGmail()
 
 if __name__ == "__main__":
     unittest.main()
