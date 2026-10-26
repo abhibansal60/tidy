@@ -140,16 +140,21 @@ def main(argv=None):
                     raise ValueError("Not set up yet. Run: tidy init --email you@gmail.com (then tidy doctor).")
                 config = json.loads(config_file.read_text())
                 email = store.required_text(config.get("mail_email"), "mail_email")
-                with gmail.connect(args.data_dir / "token_mail_write.json", email, write=True, max_calls=args.max_calls) as api:
-                    valid, outcomes = mail.recheck(api, [(r["id"], r["action"]) for r in eligible])
-                    outcomes.update(mail.apply(api, valid))
-                # Persist outcomes back into the run files: a rerun then skips what already succeeded, so it
-                # never re-trashes a message the owner has since manually restored (unless --force-reapply).
-                for r in eligible:  # the selected row objects live inside `docs`, so this updates exactly them
-                    if r["id"] in outcomes:
-                        r["outcome"] = outcomes[r["id"]]
-                for path, doc in docs:
-                    store.private_text(path, json.dumps(doc, indent=1))
+                outcomes = {}
+                try:
+                    with gmail.connect(args.data_dir / "token_mail_write.json", email, write=True, max_calls=args.max_calls) as api:
+                        valid, skipped = mail.recheck(api, [(r["id"], r["action"]) for r in eligible])
+                        outcomes.update(skipped)
+                        outcomes.update(mail.apply(api, valid))
+                finally:
+                    # Persist outcomes back into the run files, even when apply refuses (e.g. call budget): a rerun
+                    # then skips every settled message (mail.SETTLED: applied, moved or starred by the owner), so it
+                    # never re-trashes one the owner has dealt with (unless --force-reapply).
+                    for r in eligible:  # the selected row objects live inside `docs`, so this updates exactly them
+                        if r["id"] in outcomes:
+                            r["outcome"] = outcomes[r["id"]]
+                    for path, doc in docs:
+                        store.private_text(path, json.dumps(doc, indent=1))
                 output = {"run": [str(p) for p in args.run], "actions": args.actions,
                           "applied": sum(v == "applied" for v in outcomes.values()),
                           "skipped": {i: v for i, v in outcomes.items() if v.startswith("skipped")},

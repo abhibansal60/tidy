@@ -100,7 +100,7 @@ def build_parser():
     mail_act.add_argument("--run", type=Path, nargs="+", required=True, help="One or more run files written by `mail-triage --json`")
     mail_act.add_argument("--actions", nargs="+", choices=["TRASH", "SPAM"], default=["TRASH", "SPAM"])
     mail_act.add_argument("--max-calls", type=int, default=1000)
-    mail_act.add_argument("--force-reapply", action="store_true", help="Also re-run rows already marked outcome=applied in --run (e.g. after manually restoring a message)")
+    mail_act.add_argument("--force-reapply", action="store_true", help="Also re-run settled rows in --run: already applied, or skipped because the message was moved or starred since (e.g. after manually restoring a message)")
     mail_act.add_argument("--execute", action="store_true")
     resub = commands.add_parser("resubscribe", help="Restore automatically unsubscribed channels; dry run unless --execute")
     resub.add_argument("channel_ids", nargs="+")
