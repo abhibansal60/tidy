@@ -1,5 +1,6 @@
 import contextlib
 from datetime import datetime, timedelta, timezone
+import http.client
 import io
 import os
 from pathlib import Path
@@ -60,7 +61,11 @@ class OfflineTests(unittest.TestCase):
             Path(".tidy").mkdir()
             Path(".tidy/ntfy_topic").write_text("secret-topic")
             err = io.StringIO()
-            with patch.object(notify, "send", side_effect=urllib.error.URLError("name resolution")), \
-                    contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(notify.main(Path(".tidy")), 1)
-        self.assertEqual(err.getvalue(), "push failed (URLError); not sent: Mail run is stale\n")
+            for error in (urllib.error.URLError("name resolution"), http.client.IncompleteRead(b""),
+                          http.client.InvalidURL("https://ntfy.sh/secret-topic x")):
+                with patch.object(notify, "send", side_effect=error), \
+                        contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+                    self.assertEqual(notify.main(Path(".tidy")), 1)
+        self.assertEqual(err.getvalue(), "push failed (URLError); not sent: Mail run is stale\n"
+                                         "push failed (IncompleteRead); not sent: Mail run is stale\n"
+                                         "push failed (InvalidURL); not sent: Mail run is stale\n")

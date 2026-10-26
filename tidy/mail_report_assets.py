@@ -1,4 +1,4 @@
-"""Style and script for the mail dashboard (`mail_report_html`). Hash-pinned by its CSP, so edit both together."""
+"""Style and script for the mail dashboard (`mail_report_html`), which hashes them into its CSP when it renders."""
 
 
 CSS = """
