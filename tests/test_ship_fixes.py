@@ -91,7 +91,8 @@ class ActSafetyTests(unittest.TestCase):
             path = Path(d) / "p.json"
             path.write_text("[]")
             args = SimpleNamespace(command="act", proposals=path, gate_unsubscribe=True, gate_subscribe=False,
-                                   cap_unsubscribe=None, cap_subscribe=None, execute=True, override_gate=False)
+                                   cap_unsubscribe=None, cap_subscribe=None, execute=True, override_gate=False,
+                                   per_action_gate=False)
             config = profile.load(Path(d) / "none.json")
             with self.assertRaisesRegex(ValueError, "Calibration gate closed"):
                 run_act(db, Mock(), "me@example.com", args, config)

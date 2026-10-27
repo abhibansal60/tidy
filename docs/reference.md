@@ -176,6 +176,11 @@ subscriptions start a 30-day trial (`mutate.trials_due` lists the ended ones for
 review; nothing graduates or gets removed automatically). Each automatic unsubscribe
 records its subscription ID, channel and title so `resubscribe` can restore it.
 
+`--execute` refuses a closed calibration gate unless `--override-gate` is passed. By
+default that is the pooled agreement from `tidy gate`, which KEEP matches alone can
+open. `--per-action-gate` also requires each opened action's own gate, on the
+`--proposals` file (`tidy gate --per-action`; why: `docs/options/gated-auto-actions.md`).
+
 ## Evidence pilot
 
 ```bash
@@ -229,7 +234,9 @@ All of these run offline against the local database.
   `{"keep": [...], "sloppy": [...]}` file and matches titles to subscriptions.
 - `python -m tidy gate` prints agreement between proposals and your labels
   (REVIEW and unsure labels are excluded) and whether the calibration gate is
-  open: at least 30 labels and 85% agreement by default.
+  open: at least 30 labels and 85% agreement by default. `--per-action` adds the
+  per-action gate: the share of UNSUBSCRIBE (SUBSCRIBE) proposals you labeled drop
+  (keep), on a fixed third of channels (`review.held_out`). Tune on the other two.
 
 ## Labeling from a sheet
 

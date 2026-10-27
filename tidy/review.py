@@ -1,6 +1,7 @@
 """Owner review: labels, agreement with proposals (the calibration gate), labeling sample, Markdown report."""
 
 from datetime import datetime
+import hashlib
 import json
 from pathlib import Path
 
@@ -54,13 +55,13 @@ def import_label_file(db, path):
     return {"imported": imported, "unmatched": unmatched}
 
 
-def agreement(db, proposals, held_out=None):
+def agreement(db, proposals, held_out=None, agrees=AGREES):
     labels, n, agreements = current_labels(db), 0, 0
     for p in proposals:
         verdict = labels.get(p.channel_id)
-        if p.action in AGREES and verdict in ("keep", "drop") and (held_out is None or p.channel_id in held_out):
+        if p.action in agrees and verdict in ("keep", "drop") and (held_out is None or p.channel_id in held_out):
             n += 1
-            agreements += AGREES[p.action] == verdict
+            agreements += agrees[p.action] == verdict
     return {"n": n, "agreements": agreements, "rate": agreements / n if n else None}
 
 
@@ -71,6 +72,24 @@ def gate_status(stats, profile):
     elif stats["rate"] is None or stats["rate"] < gate["min_agreement"]:
         reasons.append(f"agreement {stats['rate'] or 0:.2f}, need {gate['min_agreement']}")
     return {"open": not reasons, "reasons": reasons}
+
+
+GATED = {"UNSUBSCRIBE": "drop", "SUBSCRIBE": "keep"}  # the label that agrees with each automatic action
+
+
+def held_out(channel_id):
+    """A fixed third of channels, chosen by hash: the gate counts only their labels, so tune policy on the rest."""
+    return int(hashlib.sha256(channel_id.encode()).hexdigest(), 16) % 3 == 0
+
+
+def action_gates(db, proposals, profile):
+    """Per action type (ADR 0005): the precision of that action's proposals against held-out keep/drop labels.
+    KEEP matches alone cannot open the unsubscribe gate here, and SUBSCRIBE needs labels of its own."""
+    gates = {}
+    for action, verdict in GATED.items():
+        stats = agreement(db, [p for p in proposals if held_out(p.channel_id)], agrees={action: verdict})
+        gates[action] = {**stats, "gate": gate_status(stats, profile)}
+    return gates
 
 
 def sample_for_labeling(db, judgments, k):
