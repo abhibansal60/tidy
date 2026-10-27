@@ -1,4 +1,7 @@
+import contextlib
 from datetime import datetime, timedelta, timezone
+import io
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -7,6 +10,7 @@ from unittest.mock import Mock, patch
 from typesafe_sdk import ChoiceAnswer, SystemOneResponse, TypeSafeError, Usage
 
 from tidy import store
+from tidy.__main__ import main
 from tidy.gmail import APIError
 from tidy.mail import (ACTION_FOR_CATEGORY, CATEGORIES, MailProposal, apply, classify, classify_batch,
                        evidence_hash, gate_status, propose, recheck, select_held, triage)
@@ -196,6 +200,40 @@ class SelectHeldTests(unittest.TestCase):
 
         self.assertEqual(select_held([old, new], ["TRASH"]), [])
         self.assertEqual([r["id"] for r in select_held([old, new], ["TRASH"], force_reapply=True)], ["m1"])
+
+    def test_a_message_the_owner_moved_or_starred_is_never_retried(self):
+        # Day 1 proposes TRASH; mail-act finds the owner already archived (or starred) it. If the owner later moves
+        # it back to the inbox, a rerun over the same run files must not trash it.
+        for outcome in ("skipped: no longer in inbox", "skipped: starred since the run"):
+            doc = {"run_at": "2026-09-20", "rows": [{"id": "m1", "action": "TRASH", "outcome": outcome}]}
+
+            self.assertEqual(select_held([doc], ["TRASH"]), [])
+            self.assertEqual([r["id"] for r in select_held([doc], ["TRASH"], force_reapply=True)], ["m1"])
+
+    def test_failed_recheck_or_apply_is_retried(self):
+        doc = {"run_at": "2026-09-20", "rows": [
+            {"id": "m1", "action": "TRASH", "outcome": "skipped: could not recheck (HTTP 500)"},
+            {"id": "m2", "action": "TRASH", "outcome": "error: HTTP 500"}]}
+
+        self.assertEqual([r["id"] for r in select_held([doc], ["TRASH"])], ["m1", "m2"])
+
+    def test_recheck_skips_are_saved_even_when_apply_refuses(self):
+        # The skip is what makes the message settled; losing it to a budget refusal would let a rerun trash it.
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            (root / "config.json").write_text(json.dumps({"mail_email": OWNER}))
+            run = root / "run.json"
+            run.write_text(json.dumps({"run_at": "2026-09-20", "rows": [
+                {"id": "gone", "action": "TRASH", "outcome": "held"}, {"id": "m2", "action": "TRASH", "outcome": "held"}]}))
+            api = mock_api(max_calls=0)  # apply's budget preflight refuses
+            api.labels.side_effect = {"gone": ["CATEGORY_UPDATES"], "m2": ["INBOX"]}.get
+            with patch("tidy.gmail.connect", return_value=contextlib.nullcontext(api)), \
+                    contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(main(["--data-dir", d, "mail-act", "--run", str(run), "--execute"]), 1)
+
+            rows = {r["id"]: r["outcome"] for r in json.loads(run.read_text())["rows"]}
+        self.assertEqual(rows, {"gone": "skipped: no longer in inbox", "m2": "held"})
+        api.trash.assert_not_called()
 
     def test_returns_the_row_objects_so_outcomes_can_be_recorded_in_place(self):
         doc = {"rows": [{"id": "m1", "action": "SPAM"}]}

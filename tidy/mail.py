@@ -196,18 +196,25 @@ def _chunks(items, size):
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
+# Recheck outcomes that mean the owner already dealt with the message. Like "applied", they are final.
+GONE_FROM_INBOX = "skipped: no longer in inbox"
+STARRED_SINCE = "skipped: starred since the run"
+SETTLED = {"applied", GONE_FROM_INBOX, STARRED_SINCE}
+
+
 def select_held(docs, actions, force_reapply=False):
     """Rows to apply from one or more `mail-triage --json` run docs. The newest run (by its recorded `run_at`,
-    not argument or glob order) decides each message's action; a message already applied in ANY run is
-    skipped unless `force_reapply`, so a message the owner restored is never re-trashed by an older file.
+    not argument or glob order) decides each message's action; a message settled in ANY run (applied, or skipped
+    because the owner had moved or starred it) is skipped unless `force_reapply`, so an older file never trashes
+    a message the owner restored, archived, or later moved back to the inbox.
     Returns the row dicts themselves (not copies), so callers can record outcomes in place."""
-    latest, applied = {}, set()
+    latest, settled = {}, set()
     for doc in sorted(docs, key=lambda d: d.get("run_at", "")):
         for r in doc["rows"]:
             latest[r["id"]] = r
-            if r.get("outcome") == "applied":
-                applied.add(r["id"])
-    return [r for r in latest.values() if r["action"] in actions and (force_reapply or r["id"] not in applied)]
+            if r.get("outcome") in SETTLED:
+                settled.add(r["id"])
+    return [r for r in latest.values() if r["action"] in actions and (force_reapply or r["id"] not in settled)]
 
 
 def recheck(api, pairs):
@@ -224,9 +231,9 @@ def recheck(api, pairs):
             skipped[message_id] = f"skipped: could not recheck ({error})"
             continue
         if "INBOX" not in labels:
-            skipped[message_id] = "skipped: no longer in inbox"
+            skipped[message_id] = GONE_FROM_INBOX
         elif PROTECTED_LABELS & labels:
-            skipped[message_id] = "skipped: starred since the run"
+            skipped[message_id] = STARRED_SINCE
         else:
             valid.append((message_id, action))
     return valid, skipped
