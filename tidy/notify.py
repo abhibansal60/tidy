@@ -5,6 +5,7 @@ Sends when there are "Needs you" messages, or when the run is missing or stale (
 Silent otherwise. The body carries counts and up to three sender names, never subjects or message text.
 The topic is a private random string in <data dir>/ntfy_topic; anyone who knows it can read these pushes.
 """
+import http.client
 import json
 import sys
 import urllib.request
@@ -15,7 +16,7 @@ from pathlib import Path
 from . import mail_report_html
 
 URL = "https://mail.abhibansal.dev"
-STALE_HOURS = mail_report_html.STALE_HOURS
+STALE_HOURS = 26  # notify runs right after the scheduled triage, so an older newest run means that run failed
 NAMES_SHOWN = 3
 
 
@@ -43,8 +44,9 @@ def build(doc, now=None):
     parts = [f"{len(by['needs_you'])} need you ({shown})"]
     if by["noise"]:
         parts.append(f"{len(by['noise'])} noise to clear")
-    if by["handled"]:
-        parts.append(f"{len(by['handled'])} archived for you")
+    archived = sum(r.get("outcome") == "applied" for r in by["handled"])  # proposed is not done: caps, gate, errors
+    if archived:
+        parts.append(f"{archived} archived for you")
     return f"{len(by['needs_you'])} mails need you", "; ".join(parts), "default"
 
 
@@ -65,7 +67,14 @@ def main(data_dir=Path(".tidy")):
     if message is None:
         print("nothing needs the owner; silent")
         return 0
-    send(topic_file.read_text().strip(), *message)
+    topic = topic_file.read_text().strip()
+    try:
+        send(topic, *message)
+    # Offline, ntfy refused or a broken reply (InvalidURL is a ValueError): one line in cron.log, never a traceback,
+    # because the URL and some of these messages hold the topic.
+    except (OSError, http.client.HTTPException, ValueError) as error:
+        print(f"push failed ({type(error).__name__}); not sent: {message[0]}", file=sys.stderr)
+        return 1
     print(f"sent: {message[0]}")
     return 0
 
