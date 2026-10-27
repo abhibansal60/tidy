@@ -16,10 +16,13 @@ class PilotTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.db = store.connect(self.root / "inventory.sqlite3")
+        # last_seen is real time: store.connect drops subscriptions not seen in the last 30 days of the real clock,
+        # so a fixed NOW here made the CLI test fail once NOW was 30 days old.
+        seen = store.now()
         with self.db:
             for cid, title in [("chanA", "Alpha Channel"), ("chanB", "Beta Channel"), ("chanC", "Gamma")]:
                 self.db.execute("INSERT INTO subscriptions VALUES (?, ?, ?, NULL, 1, ?)",
-                                ("sub-" + cid, cid, title, NOW.isoformat()))
+                                ("sub-" + cid, cid, title, seen))
         self.labels = self.root / "labels.json"
         self.labels.write_text(json.dumps({"keep": ["alpha channel"], "sloppy": ["Beta Channel", "Nobody"]}))
 
