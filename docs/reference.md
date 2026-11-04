@@ -176,10 +176,11 @@ subscriptions start a 30-day trial (`mutate.trials_due` lists the ended ones for
 review; nothing graduates or gets removed automatically). Each automatic unsubscribe
 records its subscription ID, channel and title so `resubscribe` can restore it.
 
-`--execute` refuses a closed calibration gate unless `--override-gate` is passed. By
-default that is the pooled agreement from `tidy gate`, which KEEP matches alone can
-open. `--per-action-gate` also requires each opened action's own gate, on the
+`--execute` refuses a closed calibration gate unless `--override-gate` is passed. Both the
+pooled agreement from `tidy gate` and each enabled action's own gate must be open.
+The per-action check uses held-out labels on the
 `--proposals` file (`tidy gate --per-action`; why: `docs/options/gated-auto-actions.md`).
+`--per-action-gate` remains accepted as a backward-compatible no-op.
 
 ## Evidence pilot
 
