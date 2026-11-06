@@ -9,7 +9,7 @@ from unittest.mock import Mock
 
 import requests
 
-from tidy import mutate, store
+from tidy import mutate, review, store
 from tidy.__main__ import main
 from tidy.proposal import Proposal
 from tidy.youtube import APIError, UnknownOutcome, YouTube
@@ -108,6 +108,27 @@ class ActTests(unittest.TestCase):
                        gates={"UNSUBSCRIBE": False, "SUBSCRIBE": True})
         self.assertEqual(self.outcomes(out), [("UNSUBSCRIBE", "a", "skipped: gate closed"),
                                               ("SUBSCRIBE", "z", "would")])
+
+    def test_latest_owner_labels_veto_both_actions_with_open_gates(self):
+        for verdict, action, channel in [("keep", "UNSUBSCRIBE", "a"), ("drop", "SUBSCRIBE", "z"),
+                                          ("unsure", "UNSUBSCRIBE", "b"), ("unsure", "SUBSCRIBE", "x")]:
+            review.label(self.db, channel, verdict)
+        proposals = [prop("a", "UNSUBSCRIBE"), prop("z", "SUBSCRIBE"),
+                     prop("b", "UNSUBSCRIBE"), prop("x", "SUBSCRIBE")]
+        dry = self.act(proposals)
+        self.assertTrue(all(a["result"].startswith("skipped: owner label") for a in dry["actions"]))
+        api, session = api_with([item(c) for c in "abcdefghij"])
+        live = self.act(proposals, api, execute=True)
+        self.assertEqual(self.outcomes(dry), self.outcomes(live))
+        session.delete.assert_not_called()
+        session.post.assert_not_called()
+
+    def test_label_changes_after_proposal_export_are_rechecked_before_caps(self):
+        proposals = [prop("a", "UNSUBSCRIBE"), prop("b", "UNSUBSCRIBE")]
+        review.label(self.db, "a", "drop")
+        review.label(self.db, "a", "keep")
+        out = self.act(proposals, caps={"unsubscribe": 1})
+        self.assertEqual([a["result"] for a in out["actions"]], ["skipped: owner label keep", "would"])
 
     def test_caps_apply_per_action_type(self):
         props = [prop(c, "UNSUBSCRIBE") for c in "abc"] + [prop(c, "SUBSCRIBE") for c in "xyz"]

@@ -155,32 +155,8 @@ fresh approval. The read-only token never gains write scope.
 
 ## Gated automatic actions
 
-`act` turns proposals into subscribes and unsubscribes, only inside an owner-started
-run (ADR 0005). It is a dry run unless you pass `--execute`, and both gates are closed
-unless you open them:
-
-```bash
-.venv/bin/python -m tidy act --proposals proposals.json --gate-unsubscribe   # dry run, offline
-.venv/bin/python -m tidy act --proposals proposals.json --gate-unsubscribe --gate-subscribe --execute
-.venv/bin/python -m tidy resubscribe CHANNEL_ID... [--execute]              # undo an automatic unsubscribe
-```
-
-`proposals.json` is a list of Proposal dicts; `tidy propose --json proposals.json` writes it. Per run, at most 5 unsubscribes and 3
-subscribes (`--cap-unsubscribe`, `--cap-subscribe`). A proposal with fewer than two
-signals is never acted on. If the eligible unsubscribes exceed the larger of three
-times the cap or 20% of active subscriptions, the whole run aborts with no action.
-`--execute` uses `token_write.json`, rechecks identity and the live list, acts one
-at a time, and writes an audit event for each. Ambiguous outcomes are marked
-`unknown`, never retried, and settled against the live list next run. New
-subscriptions start a 30-day trial (`mutate.trials_due` lists the ended ones for
-review; nothing graduates or gets removed automatically). Each automatic unsubscribe
-records its subscription ID, channel and title so `resubscribe` can restore it.
-
-`--execute` refuses a closed calibration gate unless `--override-gate` is passed. Both the
-pooled agreement from `tidy gate` and each enabled action's own gate must be open.
-The per-action check uses held-out labels on the
-`--proposals` file (`tidy gate --per-action`; why: `docs/options/gated-auto-actions.md`).
-`--per-action-gate` remains accepted as a backward-compatible no-op.
+See [Subscription action safeguards](reference-actions.md) for automatic-action commands,
+owner-label vetoes, proposal validation, calibration gates, caps, and reversal.
 
 ## Evidence pilot
 
@@ -258,6 +234,8 @@ Research notes: `docs/research/` (Fable vs Opus efficiency, public and X compari
 
 ## Discovery from watch history
 
+Configured unusable history yields REVIEW; see [history health and evidence safeguards](reference-actions.md#history-health).
+
 `tidy discover` (dry run by default) lists channels you watched at least `discovery_min_watches` times (default 3) in
 `watch_window_days` that you are not subscribed to, counted from Takeout, never searched. `--execute` collects their
 evidence with the read-only token (about 3 quota units each). After `tidy judge`, `tidy propose` gives a SUBSCRIBE
@@ -267,7 +245,7 @@ gate stays closed until the calibration gate opens.
 ## Policy with watch history and the low-quality cascade
 
 Set `watch_history_path` in `profile.json` (a Google Takeout `watch-history.html`, kept under `data/`) and
-`tidy propose` switches to policy-2: watched in the last `watch_window_days` (default 42, six weeks) is KEEP; unwatched goes
+`tidy propose` uses the watch-based policy when history is usable (see [safeguards](reference-actions.md)): watched in the last `watch_window_days` (default 42, six weeks) is KEEP; unwatched goes
 to REVIEW; a channel is proposed for UNSUBSCRIBE only when Jev and a second opinion both rate its value below
 `low_quality_value` (default 0.5), whatever its watch count. `tidy escalate` (dry run by default) sends only the
 channels Jev flags to a stronger model (`--model`, default `claude-opus-5-5`, through Claude Code headless) and stores

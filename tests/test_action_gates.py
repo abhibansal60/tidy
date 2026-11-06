@@ -1,6 +1,7 @@
 """Per-action calibration gate (ADR 0005, docs/options/gated-auto-actions.md): required by default."""
 
 import argparse
+from dataclasses import asdict, replace
 import contextlib
 import io
 import json
@@ -19,7 +20,7 @@ TUNING = [c for c in (f"chan{i}" for i in range(400)) if not review.held_out(c)]
 
 
 def prop(channel, action):
-    return Proposal(channel, action, ["value low (0.2)", "relevance low (0.1)"])
+    return Proposal(channel, action, ["value low (0.2)", "relevance low (0.1)"], "policy-1", "h-" + channel)
 
 
 class LabelDb(unittest.TestCase):
@@ -69,6 +70,12 @@ class ActionGateTests(LabelDb):
         self.assertEqual(per["UNSUBSCRIBE"]["n"], 0)
         self.assertFalse(per["UNSUBSCRIBE"]["gate"]["open"])
 
+    def test_repeated_channel_never_inflates_the_calibration_sample(self):
+        one = self.labeled([(HELD[0], "UNSUBSCRIBE", "drop")])
+        stats = review.action_gates(self.db, one * 30, CONFIG)["UNSUBSCRIBE"]
+        self.assertEqual(stats["n"], 1)
+        self.assertFalse(stats["gate"]["open"])
+
     def test_subscribe_agrees_with_keep_and_unsure_is_ignored(self):
         pairs = [(c, "SUBSCRIBE", "keep") for c in HELD[:30]] + [(HELD[30], "SUBSCRIBE", "unsure")]
         per = review.action_gates(self.db, self.labeled(pairs), CONFIG)
@@ -78,12 +85,11 @@ class ActionGateTests(LabelDb):
 
 
 class RunActGateTests(LabelDb):
-    """`act --execute` requires pooled and per-action checks; the latter uses the --proposals file."""
+    """Both gates measure the complete current derive; execution may select a verified subset."""
 
     def args(self, file_proposals, **kw):
         path = Path(self.temp.name) / "p.json"
-        path.write_text(json.dumps([{"channel_id": p.channel_id, "action": p.action, "signals": p.signals}
-                                    for p in file_proposals]))
+        path.write_text(json.dumps([asdict(p) for p in file_proposals]))
         base = dict(command="act", proposals=path, gate_unsubscribe=True, gate_subscribe=False, execute=True,
                     override_gate=False, per_action_gate=False, cap_unsubscribe=None, cap_subscribe=None)
         return argparse.Namespace(**{**base, **kw})
@@ -112,12 +118,21 @@ class RunActGateTests(LabelDb):
         with self.assertRaisesRegex(ValueError, "agreement 0.00, need 0.85"):
             self.run_act(derived, executed)
 
-    def test_default_measures_the_proposals_file_not_a_fresh_derive(self):
+    def test_stale_file_is_refused_when_current_calibration_passes(self):
         derived = self.labeled([(c, "UNSUBSCRIBE", "drop") for c in HELD[:30]])  # would open both gates
         stale = self.labeled([(c, "UNSUBSCRIBE", "keep") for c in HELD[30:60]])  # what would actually run
 
-        with self.assertRaisesRegex(ValueError, "UNSUBSCRIBE: agreement 0.00"):
+        with self.assertRaisesRegex(ValueError, "Stale or unverified"):
             self.run_act(derived, stale)
+
+    def test_trimmed_file_cannot_hide_disagreeing_current_action_labels(self):
+        agreeing = self.labeled([(c, "UNSUBSCRIBE", "drop") for c in HELD[:30]])
+        disagreeing = self.labeled([(c, "UNSUBSCRIBE", "keep") for c in HELD[30:45]])
+        keep = self.labeled([(c, "KEEP", "keep") for c in TUNING[:100]])
+        current = agreeing + disagreeing + keep
+        self.assertTrue(review.gate_status(review.agreement(self.db, current), CONFIG)["open"])
+        with self.assertRaisesRegex(ValueError, "UNSUBSCRIBE: agreement 0.67"):
+            self.run_act(current, agreeing)
 
     def test_default_checks_only_the_gates_the_owner_opened(self):
         proposals = self.labeled([(c, "UNSUBSCRIBE", "drop") for c in HELD[:30]])
@@ -129,14 +144,27 @@ class RunActGateTests(LabelDb):
         self.assertEqual(str(caught.exception), "Calibration gate closed: SUBSCRIBE: 0 labels, need 30. "
                                                 "Pass --override-gate to act anyway.")
 
-    def test_open_file_gate_passes_the_same_proposals_to_execution(self):
+    def test_open_file_gate_refuses_proposals_that_no_longer_match_current_derive(self):
         derived = self.labeled([(c, "KEEP", "keep") for c in HELD[:30]])
         executed = self.labeled([(c, "UNSUBSCRIBE", "drop") for c in HELD[30:60]])
 
-        out, act = self.run_act(derived, executed)
+        with self.assertRaisesRegex(ValueError, "Stale or unverified"):
+            self.run_act(derived, executed, override_gate=True)
 
-        self.assertEqual(out, {"acted": True})
-        self.assertEqual(act.call_args.args[2], executed)
+    def test_override_cannot_bypass_evidence_policy_or_signal_binding(self):
+        current = [prop("chanA", "UNSUBSCRIBE")]
+        for changes in ({"evidence_hash": "old"}, {"policy_version": "old"}, {"signals": ["fake", "signals"]},
+                        {"evidence_hash": ""}):
+            with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "Stale or unverified"):
+                self.run_act(current, [replace(current[0], **changes)], override_gate=True)
+        out, act = self.run_act(current, override_gate=True)
+        act.assert_called_once()
+
+    def test_duplicate_file_entries_are_rejected_even_with_override(self):
+        current = [prop(HELD[0], "UNSUBSCRIBE")]
+        for override in (False, True):
+            with self.subTest(override=override), self.assertRaisesRegex(ValueError, "Duplicate channels"):
+                self.run_act(current, current * 30, override_gate=override)
 
     def test_subscribe_requires_its_own_labels(self):
         derived = self.labeled([(c, "KEEP", "keep") for c in HELD[:30]])
@@ -144,7 +172,7 @@ class RunActGateTests(LabelDb):
             self.run_act(derived, gate_unsubscribe=False, gate_subscribe=True)
 
         executed = self.labeled([(c, "SUBSCRIBE", "keep") for c in HELD[30:60]])
-        out, act = self.run_act(derived, executed, gate_unsubscribe=False, gate_subscribe=True)
+        out, act = self.run_act(derived + executed, executed, gate_unsubscribe=False, gate_subscribe=True)
         act.assert_called_once()
         self.assertEqual(act.call_args.args[2], executed)
 

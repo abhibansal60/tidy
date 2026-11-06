@@ -2,7 +2,7 @@
 
 from datetime import datetime, timedelta
 
-from . import store
+from . import review, store
 from .youtube import APIError, DELETE_COST, SUBSCRIBE_COST, UnknownOutcome
 
 
@@ -108,9 +108,10 @@ def unsubscribe(db, api, expected_email, execute):
     return summary
 
 
-def _plan(proposals, gates, caps, subscribed, active_count):
+def _plan(proposals, gates, caps, subscribed, active_count, labels=None):
     """Decide per proposal: 'would' or 'skipped: reason'; returns (actions, abort reason)."""
     actions, seen = [], set()
+    labels = labels or {}
     for p in proposals:
         if p.action not in ("UNSUBSCRIBE", "SUBSCRIBE"):
             continue
@@ -118,7 +119,10 @@ def _plan(proposals, gates, caps, subscribed, active_count):
             actions.append({"action": p.action, "channel_id": p.channel_id, "result": "skipped: duplicate"})
             continue
         seen.add(p.channel_id)
-        if len(p.signals) < 2:
+        label = labels.get(p.channel_id)
+        if label == "unsure" or (p.action == "UNSUBSCRIBE" and label == "keep") or (p.action == "SUBSCRIBE" and label == "drop"):
+            reason = f"skipped: owner label {label}"
+        elif len(p.signals) < 2:
             reason = "skipped: fewer than two signals"
         elif not gates.get(p.action):
             reason = "skipped: gate closed"
@@ -177,7 +181,7 @@ def act(db, api, proposals, gates, caps, expected_email, execute=False, trial_da
         live = {r["channel_id"]: r["id"] for r in db.execute(
             "SELECT id, channel_id FROM subscriptions WHERE active=1")}
         subscribed = set(live)
-    actions, aborted = _plan(proposals, gates, caps, subscribed, len(live))
+    actions, aborted = _plan(proposals, gates, caps, subscribed, len(live), review.current_labels(db))
     summary = {"dry_run": not execute, "aborted": aborted, "actions": actions}
     if execute:
         planned = [a["action"] for a in actions if a["result"] == "would"]

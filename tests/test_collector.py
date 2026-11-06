@@ -114,6 +114,30 @@ class CollectorTests(unittest.TestCase):
         self.assertEqual([v["id"] for v in sample.videos], ["v1", "v3"])
         self.assertEqual(sample.coverage, {"requested": 12, "collected": 2, "unavailable": 1})
 
+    def test_missing_duration_omits_one_video_instead_of_losing_the_channel(self):
+        fake = FakeYouTube({"chanA": ["upcoming", "normal"]})
+        videos = fake.videos
+
+        def with_upcoming(params):
+            payload = videos(params)
+            payload["items"][0]["contentDetails"].pop("duration")
+            payload["items"][0]["snippet"]["liveBroadcastContent"] = "upcoming"
+            return payload
+
+        fake.videos = with_upcoming
+        result = collect(YouTube(fake.session), ["chanA"], now=NOW)
+        self.assertEqual(result.errors, {})
+        [s] = result.samples
+        self.assertEqual([v["id"] for v in s.videos], ["normal"])
+        self.assertEqual(s.coverage, {"requested": 12, "collected": 1, "unavailable": 1, "missing_duration": 1})
+
+    def test_malformed_video_details_remain_a_reported_channel_error(self):
+        fake = FakeYouTube({"chanA": ["v1"]})
+        fake.videos = lambda params: {"items": [{"id": "v1", "contentDetails": None}]}
+        result = collect(YouTube(fake.session), ["chanA"], now=NOW)
+        self.assertEqual(result.samples, [])
+        self.assertEqual(result.errors, {"chanA": "Channel response malformed."})
+
     def test_channel_without_uploads_gives_empty_sample_and_no_video_lookup(self):
         fake = FakeYouTube({"chanA": []})
 

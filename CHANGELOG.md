@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Subscription safeguards:** latest owner labels veto conflicting automatic actions, including under gate
+  override. Executed proposals must match current evidence and policy. Duplicate channels cannot inflate
+  calibration, and selecting a proposal subset cannot hide current held-out disagreements.
+- **History and evidence:** configured missing, stale or unsupported watch history now yields REVIEW instead
+  of falling back to the no-history policy. Takeout timestamps are normalized to UTC. Watch-based proposals
+  require sufficient evidence; upcoming videos without a duration no longer fail an entire channel sample.
 - **Review:** `tidy to-label` lists unlabeled channels to label next, spread across Jev value tiers and confident
   and unsure answers. The Markdown and HTML reports show Jev's distribution over score levels next to each score.
 - **Evidence:** `collect` stops at the first exhausted quota (local budget or Google's `quotaExceeded`) and lists
