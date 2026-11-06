@@ -79,6 +79,11 @@ def _sample(api, channel_id, window, now):
     details = []
     for i in range(0, len(ids), 50):
         details += api.get("videos", part="snippet,contentDetails", id=",".join(ids[i:i + 50]))["items"]
+    if any(not isinstance(v["contentDetails"], dict) for v in details):
+        raise TypeError("Malformed video content details")
+    # Upcoming premieres may have no duration yet. Unknown duration is not a zero-second video.
+    missing_duration = sum(not v["contentDetails"].get("duration") for v in details)
+    details = [v for v in details if v["contentDetails"].get("duration")]
     videos = [{"id": v["id"], "title": v["snippet"]["title"],
                "description": v["snippet"]["description"],
                "published_at": v["snippet"]["publishedAt"],
@@ -87,6 +92,9 @@ def _sample(api, channel_id, window, now):
     content = {"title": channel["snippet"]["title"], "description": channel["snippet"]["description"],
                "videos": videos}
     digest = hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()
+    coverage = {"requested": window, "collected": len(videos), "unavailable": len(ids) - len(videos)}
+    if missing_duration:
+        coverage["missing_duration"] = missing_duration
     return EvidenceSample(channel_id, content["title"], content["description"], videos,
-                          now.isoformat(), (now + RETENTION).isoformat(), {"requested": window, "collected": len(videos), "unavailable": len(ids) - len(videos)},
+                          now.isoformat(), (now + RETENTION).isoformat(), coverage,
                           max((v["published_at"] for v in videos), default=None), digest)

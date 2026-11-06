@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 from . import judge, policy, store, watch_history
+from .proposal import Proposal
 
 VERDICTS = ("keep", "drop", "unsure")
 AGREES = {"KEEP": "keep", "WATCH": "keep", "UNSUBSCRIBE": "drop"}  # REVIEW and unsure are excluded
@@ -56,8 +57,11 @@ def import_label_file(db, path):
 
 
 def agreement(db, proposals, held_out=None, agrees=AGREES):
-    labels, n, agreements = current_labels(db), 0, 0
+    labels, n, agreements, seen = current_labels(db), 0, 0, set()
     for p in proposals:
+        if p.channel_id in seen:
+            continue
+        seen.add(p.channel_id)
         verdict = labels.get(p.channel_id)
         if p.action in agrees and verdict in ("keep", "drop") and (held_out is None or p.channel_id in held_out):
             n += 1
@@ -117,9 +121,16 @@ def derive(db, profile, now=None):
             samples.append(s)
             judgments.append(j)
     trials = {r[0] for r in db.execute("SELECT channel_id FROM trials")}
-    history = Path(profile["watch_history_path"]) if profile["watch_history_path"] else None
-    if history and history.is_file():  # policy-2: revealed watching plus the two-opinion low-quality cascade
-        counts = watch_history.watch_counts(history, profile["watch_window_days"], now)
+    history = watch_history.history_status(profile["watch_history_path"], profile["watch_window_days"], now)
+    if profile["watch_history_path"] and history["status"] != "recent":
+        # An unusable export must not silently enable the less restrictive no-history policy.
+        reason = f"watch history unknown: {history['status']}"
+        if history["latest_event"]:
+            reason += f" (latest event {history['latest_event'][:10]})"
+        proposals = [Proposal(j.channel_id, "REVIEW", [reason], policy.POLICY_VERSION_WATCH, j.evidence_hash)
+                     for j in judgments]
+    elif history["status"] == "recent":  # revealed watching plus the two-opinion low-quality cascade
+        counts = history["counts"]
         active = {r[0] for r in db.execute("SELECT channel_id FROM subscriptions WHERE active=1")}
         proposals, kept = [], []
         for j, s in zip(judgments, samples):
@@ -128,7 +139,7 @@ def derive(db, profile, now=None):
                                          store.get_second_opinion(db, j.channel_id, s.evidence_hash, now),
                                          "trial" if j.channel_id in trials else "active")
             else:  # a candidate from discovery: subscribe or nothing
-                p = policy.propose_subscribe(j, counts.get(j.channel_id, 0), profile)
+                p = policy.propose_subscribe(j, counts.get(j.channel_id, 0), profile, s)
             if p:
                 proposals.append(p)
                 kept.append((j, s))

@@ -36,13 +36,18 @@ def run_act(db, api, email, args, config):
     if args.command == "resubscribe":
         return mutate.resubscribe(db, api, args.channel_ids, args.execute, email)
     proposals = [Proposal(**p) for p in json.loads(args.proposals.read_text())]
+    if len({p.channel_id for p in proposals}) != len(proposals):
+        raise ValueError("Duplicate channels in proposals; regenerate with tidy propose --json.")
     gates = {"UNSUBSCRIBE": args.gate_unsubscribe, "SUBSCRIBE": args.gate_subscribe}
+    current = review.derive(db, config)[0] if args.execute and any(gates.values()) else []
     if args.execute and any(gates.values()) and not args.override_gate:
-        reasons = review.gate_status(review.agreement(db, review.derive(db, config)[0]), config)["reasons"]
-        per = review.action_gates(db, proposals, config)
+        reasons = review.gate_status(review.agreement(db, current), config)["reasons"]
+        per = review.action_gates(db, current, config)
         reasons += [f"{a}: " + "; ".join(per[a]["gate"]["reasons"]) for a, on in gates.items() if on and not per[a]["gate"]["open"]]
         if reasons:
             raise ValueError("Calibration gate closed: " + "; ".join(reasons) + ". Pass --override-gate to act anyway.")
+    if args.execute and any(gates.get(p.action) and (not p.evidence_hash or p not in current) for p in proposals):
+        raise ValueError("Stale or unverified action proposals; regenerate with tidy propose --json before executing.")
     caps = {"unsubscribe": config["caps"]["unsubscribe"] if args.cap_unsubscribe is None else args.cap_unsubscribe,
             "subscribe": config["caps"]["subscribe"] if args.cap_subscribe is None else args.cap_subscribe}
     return mutate.act(db, api, proposals, gates, caps, email, args.execute)
