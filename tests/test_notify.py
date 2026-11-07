@@ -24,6 +24,18 @@ def doc(rows, hours_ago=1):
 
 
 class BuildTests(unittest.TestCase):
+    def test_incomplete_health_push_excludes_all_private_details_even_with_needs_you(self):
+        for rows in ([], [dict(row("private-id", "Private Name <private@example.com>"), subject="Private subject")]):
+            with self.subTest(rows=len(rows)):
+                run = {**doc(rows), "errors": {"failed-id": "private raw error token=secret"}}
+                title, body, priority = notify.build(json.loads(json.dumps(run)), NOW)
+                self.assertIn("Incomplete: 1 messages could not be classified", body)
+                self.assertIn(run["run_at"], body)
+                self.assertIn("without --apply", body)
+                self.assertEqual(priority, "high")
+                for value in ("private-id", "Private Name", "private@example.com", "Private subject", "failed-id", "secret"):
+                    self.assertNotIn(value, title + body)
+
     def test_silent_when_nothing_needs_owner(self):
         self.assertIsNone(notify.build(doc([row("a", "Shop <s@x.com>", "TRASH", "Promos"), row("b", "N <n@x.com>", "ARCHIVE")]), NOW))
 
