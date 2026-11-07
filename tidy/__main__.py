@@ -195,7 +195,8 @@ def main(argv=None):
                                          cap_archive=args.cap_archive, override_gate=args.override_gate)
                 run_at = store.now()
                 if args.html:
-                    store.private_text(args.html, mail_report_html.render(output["rows"], applied=args.apply, run_at=run_at, account=email))
+                    store.private_text(args.html, mail_report_html.render(output["rows"], applied=args.apply, run_at=run_at, account=email,
+                                                                         classification_error_count=len(output["errors"])))
                 if args.json:
                     store.private_text(args.json, json.dumps({"run_at": run_at, "mode": "apply" if args.apply else "dry", "query": args.query, "rows": output["rows"], "errors": output["errors"]}, indent=1))
                 output.update({"html": str(args.html) if args.html else None, "json": str(args.json) if args.json else None})

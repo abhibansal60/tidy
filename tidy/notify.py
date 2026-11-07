@@ -1,8 +1,8 @@
 """Push a short summary of the newest mail-triage run to the owner's phone via ntfy, only when something needs them.
 
 Run after the daily mail deploy:  python -m tidy.notify
-Sends when there are "Needs you" messages, or when the run is missing or stale (a failing cron is actionable too).
-Silent otherwise. The body carries counts and up to three sender names, never subjects or message text.
+Sends when classification is incomplete, there are "Needs you" messages, or the run is missing or stale (a failing cron is actionable too).
+Silent otherwise. Health alerts carry only counts and run time; normal summaries include up to three sender names, never subjects or message text.
 The topic is a private random string in <data dir>/ntfy_topic; anyone who knows it can read these pushes.
 """
 import http.client
@@ -30,6 +30,12 @@ def build(doc, now=None):
     if age is None or age > STALE_HOURS:
         when = f"{age:.0f}h ago" if age is not None else "never"
         return "Mail run is stale", f"The last mail triage run was {when}. Check the cron log; you may need to reauthorize Google.", "high"
+    classification_errors = len(doc.get("errors") or {})
+    if classification_errors:
+        return ("Mail classification incomplete",
+                f"Incomplete: {classification_errors} messages could not be classified. "
+                f"Run: {datetime.fromisoformat(run_at).isoformat()}. "
+                "Retry mail-triage with --execute and without --apply.", "high")
     by = {"needs_you": [], "fyi": [], "noise": [], "handled": []}
     for r in doc["rows"]:
         by[mail_report_html.bucket(r)].append(r)
