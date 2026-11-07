@@ -157,9 +157,10 @@ def _fold(title, count, inner, note=""):
             f'<div class="inner">{inner}</div></details>')
 
 
-def render(rows, applied=False, run_at=None, account=None):
+def render(rows, applied=False, run_at=None, account=None, classification_error_count=0):
     """`rows`: dicts with id, thread_id, subject, sender, snippet, category, confidence, action, signals, outcome,
-    unsubscribe. `applied`: whether the run attempted --apply at all. `run_at`: ISO time of the run (for the health line)."""
+    unsubscribe. `applied`: whether the run attempted --apply at all. `run_at`: ISO time of the run (for the health line).
+    `classification_error_count`: failed Jev judgments, separate from row mutation outcomes."""
     by = {"needs_you": [], "fyi": [], "noise": [], "handled": []}
     for r in sorted(rows, key=lambda r: -r["confidence"]):
         by[bucket(r)].append(r)
@@ -174,6 +175,12 @@ def render(rows, applied=False, run_at=None, account=None):
         ("noise", "noise", _groups(by["noise"], account, "noise", unsub=True, bulk=("archive", "trash")), "No bulk mail proposed for trash."),
         ("handled", "handled", _groups(by["handled"], account, "handled"), "Nothing archived."),
     ]
+    incomplete = ""
+    if classification_error_count:
+        incomplete = (f'<div class="health dry" role="alert"><strong>Incomplete: {classification_error_count:d} messages '
+                      'could not be classified</strong><span>Retry mail-triage with --execute and without --apply.</span></div>')
+        panes = [(k, label, cards, "No classified messages in this section. The run is incomplete.")
+                 for k, label, cards, _ in panes]
     chips = "".join(f'<a href="#{k}" data-b="{k}" aria-selected="false"><b>{len(by[k])}</b> {label}</a>' for k, label, _, _ in panes)
     body = "\n".join(f'<section class="tab" data-tab="{k}" hidden>' + (_unsub_bar(by["noise"]) if k == "noise" else "") + (f'<div class="grid">{cards}</div>' if cards else f'<div class="empty">{escape(empty)}</div>') + "</section>"
                      for k, _, cards, empty in panes)
@@ -187,6 +194,7 @@ def render(rows, applied=False, run_at=None, account=None):
 <title>Mail</title><style>{CSS}</style></head><body><main>
 <nav class="tabs" aria-label="Sections"><a href="/" aria-current="page">Mail</a><a href="/jobs">Jobs</a><button type="button" id="refresh" aria-label="Refresh">Refresh</button></nav>
 <div id="health" class="{health_cls}" data-run-at="{escape(run_at or '', quote=True)}"><span>Ran <strong data-when>{escape(run_at or 'unknown time')}</strong></span><span data-state>{escape(state)}</span><span>{len(rows)} messages judged by Jev</span></div>
+{incomplete}
 <div class="chips">{chips}</div>
 <input id="q" type="search" placeholder="Search subject or sender" aria-label="Search subject or sender">
 {body}
