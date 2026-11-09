@@ -285,9 +285,19 @@ def triage(api, client, owner_email, query, limit, db=None, write_api=None, cap_
     when overridden."""
     if cap_archive < 0:
         raise ValueError("--cap-archive must not be negative.")
-    messages = [parse_message(api.message(i)) for i in api.message_ids(query, limit)]
+    messages, errors = [], {}
+    for i in api.message_ids(query, limit):
+        try:
+            raw = api.message(i)
+        except APIError as error:
+            # Only a per-message 4xx is skipped; auth (401), network, 5xx and quota errors stop the run.
+            if error.status_code in (None, 401) or not 400 <= error.status_code < 500 or error.retryable:
+                raise
+            errors[i] = str(error)
+            continue
+        messages.append(parse_message(raw))
     judgments = classify_batch(client, messages, owner_email, db=db)
-    errors = {i: j for i, j in judgments.items() if isinstance(j, str)}
+    errors.update({i: j for i, j in judgments.items() if isinstance(j, str)})
     by_id = {m["id"]: m for m in messages}
     proposals = {i: propose(j, by_id[i]["label_ids"]) for i, j in judgments.items() if i not in errors}
     gate = gate_status()
