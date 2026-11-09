@@ -204,6 +204,19 @@ class TriageTests(unittest.TestCase):
         client.system_one.assert_not_called()
         write_api.batch_modify.assert_not_called()
 
+    def test_message_401_aborts_the_run(self):
+        session = Mock()
+        session.get.side_effect = [
+            response({"messages": [{"id": "arch1"}, {"id": "expired"}]}),
+            response(raw("arch1", "Your order shipped")), response({}, 401),
+        ]
+        client, write_api = SubjectClient(CATEGORY), mock_api()
+        with self.assertRaises(APIError):
+            triage(Gmail(session), client, OWNER, "in:inbox", 50, write_api=write_api,
+                   cap_archive=100, override_gate=True)
+        client.system_one.assert_not_called()
+        write_api.batch_modify.assert_not_called()
+
     def test_message_list_4xx_still_aborts(self):
         session = Mock()
         session.get.return_value = response({}, 404)

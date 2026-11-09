@@ -290,7 +290,8 @@ def triage(api, client, owner_email, query, limit, db=None, write_api=None, cap_
         try:
             raw = api.message(i)
         except APIError as error:
-            if error.status_code is None or not 400 <= error.status_code < 500 or error.retryable:
+            # Only a per-message 4xx is skipped; auth (401), network, 5xx and quota errors stop the run.
+            if error.status_code in (None, 401) or not 400 <= error.status_code < 500 or error.retryable:
                 raise
             errors[i] = str(error)
             continue
