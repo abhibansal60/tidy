@@ -1,13 +1,16 @@
 """`mail.triage`, the path the scheduled `mail-triage --execute --apply --override-gate` run takes."""
 
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+import requests
 
 from typesafe_sdk import TypeSafeError
 
-from tidy.gmail import APIError
+from tidy.gmail import APIError, Gmail, RETRY_ATTEMPTS
 from tidy.mail import triage
 from test_mail import OWNER, answer, mock_api
+from test_gmail import response, rate_limited
 
 
 def raw(id, subject, labels=("INBOX", "CATEGORY_UPDATES"), unsubscribe=True, to=OWNER):
@@ -143,6 +146,71 @@ class TriageTests(unittest.TestCase):
 
         self.assertEqual(set(out["mutation_errors"]), {"arch1", "arch2"})
         self.assertTrue(self.outcome(out)["arch1"][1].startswith("error"))
+
+    def test_message_4xx_is_recorded_and_only_fetched_classified_mail_is_archived(self):
+        for status in (400, 403, 404, 410):
+            with self.subTest(status=status):
+                session = Mock()
+                session.get.side_effect = [
+                    response({"messages": [{"id": i} for i in ("arch1", "missing", "arch2", "promo")]}),
+                    response(raw("arch1", "Your order shipped")), response({}, status),
+                    response(raw("arch2", "Statement ready")), response(raw("promo", "50% off")),
+                ]
+                client = SubjectClient({**CATEGORY, "50% off": TypeSafeError("classification failed")})
+                write_api = mock_api()
+
+                out = triage(Gmail(session), client, OWNER, "in:inbox", 50, write_api=write_api,
+                             cap_archive=100, override_gate=True)
+
+                self.assertEqual(out["errors"], {
+                    "missing": f"API returned HTTP {status}; check auth in Google Console.",
+                    "promo": "classification failed"})
+                self.assertEqual({r["id"] for r in out["rows"]}, {"arch1", "arch2"})
+                self.assertEqual(client.system_one.call_count, 3)
+                write_api.batch_modify.assert_called_once_with(["arch1", "arch2"], add=[], remove=["INBOX"])
+                write_api.trash.assert_not_called()
+
+    @patch("tidy.gmail.time.sleep")
+    def test_network_server_quota_and_budget_errors_stop_before_classification_or_archive(self, sleep):
+        failures = [requests.ConnectionError(), response({}, 503), response({}, 429),
+                    *(rate_limited(reason) for reason in
+                      ("rateLimitExceeded", "quotaExceeded", "userRateLimitExceeded"))]
+        for failure in failures:
+            with self.subTest(failure=failure):
+                session = Mock()
+                session.get.side_effect = [
+                    response({"messages": [{"id": i} for i in ("arch1", "broken", "arch2")]}),
+                    response(raw("arch1", "Your order shipped")),
+                    *([failure] * RETRY_ATTEMPTS),
+                ]
+                client, write_api = SubjectClient(CATEGORY), mock_api()
+
+                with self.assertRaises(APIError):
+                    triage(Gmail(session), client, OWNER, "in:inbox", 50, write_api=write_api,
+                           cap_archive=100, override_gate=True)
+
+                self.assertEqual(session.get.call_count, 2 + RETRY_ATTEMPTS)
+                client.system_one.assert_not_called()
+                write_api.batch_modify.assert_not_called()
+                write_api.trash.assert_not_called()
+
+        session = Mock()
+        session.get.return_value = response({"messages": [{"id": "arch1"}, {"id": "arch2"}]})
+        client, write_api = SubjectClient(CATEGORY), mock_api()
+        with self.assertRaisesRegex(APIError, "budget"):
+            triage(Gmail(session, max_calls=1), client, OWNER, "in:inbox", 50, write_api=write_api,
+                   cap_archive=100, override_gate=True)
+        self.assertEqual(session.get.call_count, 1)
+        client.system_one.assert_not_called()
+        write_api.batch_modify.assert_not_called()
+
+    def test_message_list_4xx_still_aborts(self):
+        session = Mock()
+        session.get.return_value = response({}, 404)
+        client = SubjectClient(CATEGORY)
+        with self.assertRaises(APIError):
+            triage(Gmail(session), client, OWNER, "in:inbox", 50)
+        client.system_one.assert_not_called()
 
     def test_too_small_write_budget_applies_nothing(self):
         api = mock_api(calls=1000, max_calls=1000)
