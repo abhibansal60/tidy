@@ -23,7 +23,11 @@ USERINFO = "https://openidconnect.googleapis.com/v1/userinfo"
 
 
 class APIError(RuntimeError):
-    pass
+    def __init__(self, message, *, status_code=None, retryable=False):
+        super().__init__(message)
+        self.status_code = status_code
+        # Preserve quota-related 403s as fatal even after their retries are exhausted.
+        self.retryable = retryable
 
 
 _ID_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
@@ -101,7 +105,8 @@ class Gmail:
             if attempt < RETRY_ATTEMPTS - 1 and _retryable(response):
                 time.sleep(_retry_delay(response))
                 continue
-            raise APIError(f"API returned HTTP {response.status_code}; check auth in Google Console.")
+            raise APIError(f"API returned HTTP {response.status_code}; check auth in Google Console.",
+                           status_code=response.status_code, retryable=_retryable(response))
 
     def identity(self, expected_email):
         user = self.get("userinfo")
@@ -164,7 +169,8 @@ class Gmail:
             if attempt < RETRY_ATTEMPTS - 1 and _retryable(response):
                 time.sleep(_retry_delay(response))
                 continue
-            raise APIError(f"API returned HTTP {response.status_code}; label change may be partial. Rerun is safe.")
+            raise APIError(f"API returned HTTP {response.status_code}; label change may be partial. Rerun is safe.",
+                           status_code=response.status_code, retryable=_retryable(response))
 
     def trash(self, message_id):
         """Move one message to Trash: reversible, Gmail purges Trash after ~30 days. Never permanently deletes.
@@ -185,7 +191,8 @@ class Gmail:
             if attempt < RETRY_ATTEMPTS - 1 and _retryable(response):
                 time.sleep(_retry_delay(response))
                 continue
-            raise APIError(f"API returned HTTP {response.status_code}; trash may be partial. Rerun is safe.")
+            raise APIError(f"API returned HTTP {response.status_code}; trash may be partial. Rerun is safe.",
+                           status_code=response.status_code, retryable=_retryable(response))
 
 
 

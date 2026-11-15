@@ -285,6 +285,36 @@ class RetryTests(unittest.TestCase):
         self.sleep = patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_http_errors_carry_status_and_retryability_on_reads_and_mutations(self):
+        for operation in (lambda api: api.message("m1"),
+                          lambda api: api.batch_modify(["m1"], remove=["INBOX"]),
+                          lambda api: api.trash("m1")):
+            for status, retryable in ((404, False), (429, True), (503, True)):
+                with self.subTest(operation=operation, status=status):
+                    session = Mock()
+                    session.get.return_value = session.post.return_value = response({}, status)
+                    with self.assertRaises(APIError) as caught:
+                        operation(Gmail(session))
+                    self.assertEqual(caught.exception.status_code, status)
+                    self.assertEqual(caught.exception.retryable, retryable)
+
+    def test_quota_403_preserves_retryability_after_retries(self):
+        session = Mock()
+        session.get.return_value = rate_limited()
+        with self.assertRaises(APIError) as caught:
+            Gmail(session).message("m1")
+        self.assertEqual(caught.exception.status_code, 403)
+        self.assertTrue(caught.exception.retryable)
+        self.assertEqual(session.get.call_count, RETRY_ATTEMPTS)
+
+    def test_non_http_errors_have_no_status(self):
+        session = Mock()
+        session.get.side_effect = requests.ConnectionError()
+        with self.assertRaises(APIError) as caught:
+            Gmail(session).message("m1")
+        self.assertIsNone(caught.exception.status_code)
+        self.assertEqual(str(APIError("legacy caller")), "legacy caller")
+
     def test_get_retries_429_and_5xx_and_counts_every_attempt(self):
         session = Mock()
         session.get.side_effect = [response({}, 429), response({}, 503), response({"id": "m1"})]

@@ -53,7 +53,25 @@ def propose(judgment, sample, profile, status="active"):
     return Proposal(judgment.channel_id, action, signals, POLICY_VERSION, judgment.evidence_hash)
 
 
-POLICY_VERSION_WATCH = "policy-2"
+POLICY_VERSION_WATCH = "policy-2-evidence-v1"
+
+
+def _meets_floor(value, floor):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and floor <= value <= 1
+
+
+def _evidence_issues(judgment, sample, profile):
+    """These checks can only veto actions; model confidence is not calibrated approval."""
+    issues = []
+    if not sample.videos or not sample.coverage.get("collected", 0):
+        issues.append("no recent uploads")
+    suff = judgment.answers.get("evidence_sufficiency", {}).get("noul")
+    if not _meets_floor(suff, profile["thresholds"]["sufficiency_min"]):
+        issues.append("evidence insufficient or missing")
+    confidence = judgment.answers.get("apparent_value", {}).get("confidence")
+    if not _meets_floor(confidence, profile["thresholds"]["min_confidence"]):
+        issues.append("value confidence low or missing")
+    return issues
 
 
 def propose_watch(judgment, sample, profile, watched, second=None, status="active"):
@@ -61,12 +79,18 @@ def propose_watch(judgment, sample, profile, watched, second=None, status="activ
     days, low = profile["watch_window_days"], profile["low_quality_value"]
     val = judgment.answers["apparent_value"]["score"]
     signals = ["on trial"] if status == "trial" else []
+    issues = _evidence_issues(judgment, sample, profile)
+    if issues:
+        return Proposal(judgment.channel_id, "REVIEW", signals + issues, POLICY_VERSION_WATCH, judgment.evidence_hash)
     if val < low:
         signals.append(f"value low, Jev ({val:.1f})")
         if second is None:
             action = "REVIEW"
             signals.append("needs second opinion")
-        elif second["apparent_value"] < low:
+        elif not _meets_floor(second.get("evidence_sufficiency"), profile["thresholds"]["sufficiency_min"]):
+            action = "REVIEW"
+            signals.append("second opinion evidence insufficient")
+        elif 0 <= second["apparent_value"] < low:
             action = "UNSUBSCRIBE"
             signals += [f"value low, second opinion ({second['apparent_value']:.1f})",
                         f"watched {watched} times in {days} days"]  # shown so the owner can veto
@@ -83,10 +107,10 @@ def propose_watch(judgment, sample, profile, watched, second=None, status="activ
     return Proposal(judgment.channel_id, "REVIEW", signals, POLICY_VERSION_WATCH, judgment.evidence_hash)
 
 
-def propose_subscribe(judgment, watched, profile):
+def propose_subscribe(judgment, watched, profile, sample):
     """A channel the owner is not subscribed to: SUBSCRIBE when watching repeats and quality clears a low floor."""
     val = judgment.answers["apparent_value"]["score"]
-    if val < profile["discovery_min_value"] or watched < profile["discovery_min_watches"]:
+    if _evidence_issues(judgment, sample, profile) or val < profile["discovery_min_value"] or watched < profile["discovery_min_watches"]:
         return None
     return Proposal(judgment.channel_id, "SUBSCRIBE",
                     [f"value {val:.1f}", f"watched {watched} times in {profile['watch_window_days']} days, not subscribed"],

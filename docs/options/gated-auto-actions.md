@@ -1,7 +1,7 @@
 # Options: gated automatic actions (issue #5)
 
-Written 2026-10-24 during an unattended run. Scope is YouTube `act` (ADR 0005). Mail triage has its own, always-closed
-gate (`mail.gate_status`) and is covered only in the last section.
+Written 2026-10-24 during an unattended run; updated for the 2026-11-04 ruling on #29. Scope is YouTube `act`
+(ADR 0005). Mail triage has its own, always-closed gate (`mail.gate_status`) and is covered only in the last section.
 
 ## Where #5 stands
 
@@ -11,9 +11,23 @@ two-signal rule, an `auto_actions` row and `audit_events` entry for every attemp
 from the live list, `resubscribe`, and 30-day trials. `act --execute` refuses a closed calibration gate unless
 `--override-gate` is passed (`tidy/__main__.py`, `run_act`).
 
-What does not match ADR 0005 yet:
+## Ruling on #29 (2026-11-04)
 
-| ADR 0005 says | Code today | Effect |
+The held-out per-action gate is mandatory by default **and the pooled gate stays**. For each enabled automatic
+action, `act --execute` requires both pooled agreement on freshly derived proposals and that action's precision on
+the exact `--proposals` file passed to execution. Either gate can refuse the run. KEEP matches alone cannot unlock
+UNSUBSCRIBE. `--per-action-gate` remains accepted as a backward-compatible no-op.
+
+`--override-gate` still explicitly bypasses both calibration checks. Dry runs remain the default and do not require
+calibration; automatic action types remain disabled until their `--gate-*` flags are passed. Caps, live rechecks and
+other mutation safeguards still apply.
+
+The following table records the gaps before the per-action gate was implemented and made mandatory. The first
+three rows are now addressed; trial review and consent remain separate work.
+
+Historical gaps in ADR 0005:
+
+| ADR 0005 says | Before the per-action gate | Effect |
 |---|---|---|
 | gate per action type | one number, `review.agreement`, over every KEEP, WATCH and UNSUBSCRIBE proposal | the gate can open on KEEP matches alone, then let `--gate-unsubscribe` act with no evidence that UNSUBSCRIBE proposals match drop labels |
 | gate per action type | SUBSCRIBE is not in `review.AGREES` | `--gate-subscribe` is checked against the unsubscribe/keep number; subscribe has no calibration of its own |
@@ -21,9 +35,9 @@ What does not match ADR 0005 yet:
 | trial review | `mutate.trials_due` exists | no command shows it, so ended trials are never surfaced |
 | consent per action | open policy question (`docs/research/youtube-api-policy.md`) | not a code question; stays with the owner |
 
-A worked case of the first row: 30 labeled channels, all `keep`, all proposed KEEP. Agreement is 30 of 30, the gate
-opens, and `act --execute --gate-unsubscribe` may unsubscribe up to 5 channels even though no UNSUBSCRIBE proposal was
-ever checked against a label.
+The former failure mode in the first row: 30 labeled channels, all `keep`, all proposed KEEP. Pooled agreement is
+30 of 30, so the pooled gate opens. Previously `act --execute --gate-unsubscribe` could unsubscribe up to 5 channels
+even though no UNSUBSCRIBE proposal was ever checked against a label.
 
 With the labels on hand (66 on the experiment account, per the 2026-09-21 notes, and no Jev dimension better than
 chance at predicting them), every design below keeps the gate closed. That is the honest outcome, and it is the point:
@@ -39,12 +53,12 @@ label `drop` (for SUBSCRIBE, `keep`).
 held_out(channel_id) = sha256(channel_id) mod 3 == 0         # about one third, stable, no stored state
 gate[UNSUBSCRIBE] = gate_status(precision(UNSUBSCRIBE -> drop, held-out labels), profile.gate)
 gate[SUBSCRIBE]   = gate_status(precision(SUBSCRIBE   -> keep, held-out labels), profile.gate)
-act --execute --gate-unsubscribe   needs gate[UNSUBSCRIBE] open
-act --execute --gate-subscribe     needs gate[SUBSCRIBE] open
+act --execute --gate-unsubscribe   needs pooled gate AND gate[UNSUBSCRIBE] open
+act --execute --gate-subscribe     needs pooled gate AND gate[SUBSCRIBE] open
 ```
 
-- Cost: small. One function in `review.py`, a flag on `act` and `gate`. The 30-label minimum now applies to labeled
-  UNSUBSCRIBE proposals in the held-out third, so the owner needs roughly 90 labeled UNSUBSCRIBE proposals before the
+- Cost: small. One function in `review.py`, mandatory on `act` and reported by `gate --per-action`. The 30-label
+  minimum now applies to labeled UNSUBSCRIBE proposals in the held-out third, so the owner needs roughly 90 labeled UNSUBSCRIBE proposals before the
   unsubscribe gate can open. That is slow on purpose.
 - Gain: the gate measures the action it unlocks. A wrong unsubscribe is the costly mistake, and precision is exactly
   that rate. The split needs no storage, and owner labels stay untouched (they never expire).
@@ -75,14 +89,11 @@ and held out by construction.
 - Gain: the strongest evidence. It catches policy drift, because a new policy version starts with an empty ledger.
 - Risk: very slow to open at monthly runs. More code than the gate needs today.
 
-## Recommendation
+## Decision
 
-**A**, behind a flag first (`tidy gate --per-action`, `tidy act --per-action-gate`), so today's behaviour is unchanged
-until the owner flips it. Under the flag the per-action gate is checked in addition to the pooled one, so it only makes
-`act --execute` refuse more often and never makes a mutation more likely; that is what makes it safe to ship. Making
-it the default and deleting the pooled check is a later owner decision, because then the per-action gate alone decides.
-Add a `tidy trials` command that prints `mutate.trials_due` (small, separate PR). Consider C only if Tidy gets regular
-use again.
+**A**, required by default alongside the pooled gate, per #29. Keep tuning on the other two thirds of channels;
+the historical held-out-label limitations above still apply. Add a `tidy trials` command that prints
+`mutate.trials_due` in a separate PR. Consider C only if Tidy gets regular use again.
 
 ## Mail (outside ADR 0005)
 

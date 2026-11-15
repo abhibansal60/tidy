@@ -53,6 +53,18 @@ class RenderTests(unittest.TestCase):
         self.assertIn("<b>1</b> need you", html)
         self.assertIn("<b>1</b> noise", html)
 
+    def test_incomplete_count_is_optional_and_keeps_partial_rows_and_escaping(self):
+        self.assertEqual(m.render([]), m.render([], classification_error_count=0))
+        html = m.render([row(subject="<private>")], run_at='<time>"', classification_error_count=2)
+        self.assertIn('role="alert"', html)
+        self.assertIn("Incomplete: 2 messages could not be classified", html)
+        self.assertIn("without --apply", html)
+        self.assertIn("&lt;private&gt;", html)
+        self.assertIn("&lt;time&gt;&quot;", html)
+        self.assertNotIn("Nothing needs you right now", html)
+        self.assertIn("No classified messages in this section", html)
+        self.assertIn("connect-src 'self'", html)
+
     def test_empty_needs_you_state(self):
         self.assertIn("Nothing needs you right now", m.render([row()]))
 

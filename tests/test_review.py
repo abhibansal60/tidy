@@ -210,9 +210,10 @@ class CliTests(unittest.TestCase):
         self.assertEqual(review.current_labels(db), {})
         db.close()
 
-    def write_profile_with_history(self):
+    def write_profile_with_history(self, recent=True):
         history = self.dir / "watch-history.html"
-        history.write_text("<html><body>" + cell("v9", "UCother", "Other", "Jan 2, 2020, 12:00:00 AM IST") + "</body></html>",
+        when = datetime.now(timezone.utc).strftime("%b %d, %Y, %I:%M:%S %p UTC") if recent else "Jan 2, 2020, 12:00:00 AM IST"
+        history.write_text("<html><body>" + cell("v9", "UCother", "Other", when) + "</body></html>",
                            encoding="utf-8")
         (self.dir / "profile.json").write_text(json.dumps({"watch_history_path": str(history)}))
 
@@ -224,12 +225,25 @@ class CliTests(unittest.TestCase):
 
         db = store.connect(self.dir / "inventory.sqlite3")
         s = store.latest_samples(db)[0]
-        store.put_second_opinion(db, "chanA", s.evidence_hash, "opus-x", {"apparent_value": 0.2}, s.expires_at)
+        store.put_second_opinion(db, "chanA", s.evidence_hash, "opus-x",
+                                 {"apparent_value": 0.2, "evidence_sufficiency": 0.9}, s.expires_at)
         db.close()
         code, out = self.run_cli("propose")
 
         self.assertIn("UNSUBSCRIBE", out)
         self.assertIn("value low, second opinion (0.2)", out)
+
+    def test_stale_configured_history_abstains_instead_of_falling_back_to_policy_one(self):
+        self.write_profile_with_history(recent=False)
+        code, out = self.run_cli("propose")
+        self.assertEqual(code, 0)
+        self.assertIn("watch history unknown: stale", out)
+        self.assertIn("REVIEW", out)
+        self.assertNotIn("unwatched", out)
+        self.assertNotIn("UNSUBSCRIBE", out)
+        plan = json.loads(self.run_cli("discover")[1])
+        self.assertEqual(plan["watch_history"]["status"], "stale")
+        self.assertEqual(plan["candidates"], [])
 
     def test_labels_import(self):
         path = self.dir / "l.json"

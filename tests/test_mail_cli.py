@@ -9,10 +9,14 @@ import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
+from typesafe_sdk import TypeSafeError
+
+from tidy import notify
+from tidy.gmail import APIError
 from tidy.__main__ import main
 from tidy.gmail import Gmail
 from test_gmail import response
-from test_mail_triage import CATEGORY, OWNER, SubjectClient, inbox
+from test_mail_triage import CATEGORY, OWNER, SubjectClient, FakeInbox, inbox
 
 
 class FakeGmail:
@@ -41,7 +45,7 @@ class MailCliTests(unittest.TestCase):
 
     def run_cli(self, *args):
         out, err = io.StringIO(), io.StringIO()
-        client = contextlib.nullcontext(SubjectClient(CATEGORY))
+        client = contextlib.nullcontext(SubjectClient(getattr(self, "categories", CATEGORY)))
         with patch("tidy.gmail.connect", self.gmail.connect), \
                 patch("tidy.setup_check.typesafe_client", return_value=client), \
                 contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -53,6 +57,59 @@ class MailCliTests(unittest.TestCase):
 
 
 class MailTriageCliTests(MailCliTests):
+    def test_classification_failures_warn_in_html_and_saved_run_push(self):
+        for failed in (list(CATEGORY), ["Lunch?"]):
+            with self.subTest(failed=len(failed)):
+                self.categories = {**CATEGORY, **{subject: TypeSafeError("private-error-secret") for subject in failed}}
+                html_path = self.root / "inbox.html"
+                code, out, _ = self.triage("--html", str(html_path))
+                self.assertEqual(code, 0)
+                doc = json.loads((self.root / "run.json").read_text())
+                self.assertEqual(len(doc["errors"]), len(failed))
+                self.assertEqual(len(doc["rows"]), len(CATEGORY) - len(failed))
+                html = html_path.read_text()
+                warning = f"Incomplete: {len(failed)} messages could not be classified"
+                self.assertIn(warning, html)
+                self.assertIn(doc["run_at"], html)
+                self.assertIn("without --apply", html)
+                self.assertNotIn("Nothing needs you right now", html)
+                self.assertNotIn("private-error-secret", html)
+                self.assertEqual(stat.S_IMODE(html_path.stat().st_mode), 0o600)
+                if doc["rows"]:
+                    self.assertIn("Your order shipped", html)
+                title, body, priority = notify.build(doc)
+                self.assertIn(warning, body)
+                self.assertIn(doc["run_at"], body)
+                self.assertIn("without --apply", body)
+                self.assertEqual(priority, "high")
+                for private in ["private-error-secret", *doc["errors"]]:
+                    self.assertNotIn(private, title + body)
+                self.gmail.write.batch_modify.assert_not_called()
+
+    def test_zero_fetched_is_normal_and_old_run_json_is_supported(self):
+        self.gmail.read = FakeInbox()
+        html_path = self.root / "inbox.html"
+        code, _, _ = self.triage("--html", str(html_path))
+        self.assertEqual(code, 0)
+        doc = json.loads((self.root / "run.json").read_text())
+        self.assertEqual((doc["rows"], doc["errors"]), ([], {}))
+        self.assertIn("Nothing needs you right now", html_path.read_text())
+        self.assertNotIn("Incomplete:", html_path.read_text())
+        self.assertIsNone(notify.build(doc))
+        del doc["errors"]  # old saved runs have no classification errors field
+        self.assertIsNone(notify.build(doc))
+
+    def test_mutation_failures_do_not_count_as_classification_failures(self):
+        self.gmail.write.batch_modify.side_effect = APIError("synthetic mutation failure")
+        html_path = self.root / "inbox.html"
+        code, out, _ = self.triage("--apply", "--override-gate", "--cap-archive", "100", "--html", str(html_path))
+        self.assertEqual(code, 0)
+        self.assertTrue(json.loads(out)["mutation_errors"])
+        doc = json.loads((self.root / "run.json").read_text())
+        self.assertEqual(doc["errors"], {})
+        self.assertNotIn("Incomplete:", html_path.read_text())
+        self.assertNotIn("could not be classified", notify.build(doc)[1])
+
     def test_without_execute_opens_no_token(self):
         code, out, _ = self.run_cli("mail-triage", "--apply", "--override-gate")
 

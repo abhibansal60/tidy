@@ -69,12 +69,12 @@ class WatchPolicyTests(unittest.TestCase):
         return policy.propose_watch(judgment(val=val), sample(), self.profile, watched, second)
 
     def test_low_quality_confirmed_by_second_opinion_is_unsubscribe_even_if_watched(self):
-        p = self.run_policy(0.3, watched=9, second={"apparent_value": 0.4})
+        p = self.run_policy(0.3, watched=9, second={"apparent_value": 0.4, "evidence_sufficiency": 0.9})
 
         self.assertEqual(p.action, "UNSUBSCRIBE")
         self.assertEqual(p.signals, ["value low, Jev (0.3)", "value low, second opinion (0.4)",
                                      "watched 9 times in 42 days"])
-        self.assertEqual(p.policy_version, "policy-2")
+        self.assertEqual(p.policy_version, policy.POLICY_VERSION_WATCH)
 
     def test_low_quality_without_second_opinion_only_asks_for_one(self):
         p = self.run_policy(0.3, watched=0)
@@ -82,7 +82,7 @@ class WatchPolicyTests(unittest.TestCase):
         self.assertEqual((p.action, p.signals), ("REVIEW", ["value low, Jev (0.3)", "needs second opinion"]))
 
     def test_second_opinion_that_disagrees_blocks_the_unsubscribe(self):
-        p = self.run_policy(0.3, watched=0, second={"apparent_value": 0.9})
+        p = self.run_policy(0.3, watched=0, second={"apparent_value": 0.9, "evidence_sufficiency": 0.9})
 
         self.assertEqual(p.action, "REVIEW")
         self.assertIn("second opinion disagrees (0.9)", p.signals)
@@ -101,6 +101,32 @@ class WatchPolicyTests(unittest.TestCase):
 
         self.assertEqual(p.signals, ["unwatched in 30 days"])
 
+    def test_actions_abstain_on_empty_thin_or_uncertain_evidence(self):
+        for j, s in [(judgment(val=0.2), replace(sample(), videos=[], coverage={"collected": 0})),
+                     (judgment(val=0.2, suff=0.2), sample()),
+                     (judgment(val=0.2, val_conf=0.2), sample())]:
+            with self.subTest(answers=j.answers, coverage=s.coverage):
+                p = policy.propose_watch(j, s, PROFILE, 3, {"apparent_value": 0.2, "evidence_sufficiency": 0.9})
+                self.assertEqual(p.action, "REVIEW")
+                self.assertIsNone(policy.propose_subscribe(j, 9, PROFILE, s))
+
+    def test_second_opinion_needs_its_own_sufficiency(self):
+        for second in ({"apparent_value": 0.2}, {"apparent_value": 0.2, "evidence_sufficiency": 0.2},
+                       {"apparent_value": 0.2, "evidence_sufficiency": float("nan")},
+                       {"apparent_value": 0.2, "evidence_sufficiency": 2}):
+            self.assertEqual(self.run_policy(0.2, 0, second).action, "REVIEW")
+
+    def test_missing_judgment_safety_fields_fail_closed(self):
+        for field in ("evidence_sufficiency", "apparent_value"):
+            j = judgment(val=0.2)
+            if field == "apparent_value":
+                j.answers[field].pop("confidence")
+            else:
+                j.answers.pop(field)
+            for floor in (0, 0.5):
+                config = {**PROFILE, "thresholds": {**PROFILE["thresholds"], "min_confidence": floor, "sufficiency_min": floor}}
+                self.assertEqual(policy.propose_watch(j, sample(), config, 0).action, "REVIEW")
+
 
 class SubscribeTests(unittest.TestCase):
     def test_subscribe_needs_repeat_watching_and_a_quality_floor(self):
@@ -110,11 +136,11 @@ class SubscribeTests(unittest.TestCase):
                                              ("good but watched too little", 3.0, 1, None),
                                              ("exactly the minimums", 0.5, 3, "SUBSCRIBE")]:
             with self.subTest(name):
-                p = policy.propose_subscribe(judgment(val=val), watched, PROFILE)
+                p = policy.propose_subscribe(judgment(val=val), watched, PROFILE, sample())
                 self.assertEqual(p and p.action, expected)
 
     def test_subscribe_signals_show_the_evidence_and_policy(self):
-        p = policy.propose_subscribe(judgment(val=2.5, evidence_hash="abc"), 4, PROFILE)
+        p = policy.propose_subscribe(judgment(val=2.5, evidence_hash="abc"), 4, PROFILE, sample())
 
         self.assertEqual(p.signals, ["value 2.5", "watched 4 times in 42 days, not subscribed"])
-        self.assertEqual((p.channel_id, p.evidence_hash, p.policy_version), ("chanA", "abc", "policy-2"))
+        self.assertEqual((p.channel_id, p.evidence_hash, p.policy_version), ("chanA", "abc", policy.POLICY_VERSION_WATCH))
